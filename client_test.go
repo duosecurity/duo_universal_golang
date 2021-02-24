@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/dgrijalva/jwt-go"
 )
 
 var clientId = "DIXXXXXXXXXXXXXXXXXX"
@@ -14,6 +17,8 @@ var clientSecret = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 var shortClientSecret = "beefdeadbeefdeadbeefdeadbeef"
 var apiHost = "api-deadbeef.duosecurity.com"
 var redirectUri = "https://example.com"
+var state = "deadbeefdeadbeefdeadbeefdeadbeefdead"
+var username = "user1"
 var nilErrErrorMsg = "Did not recieve expected error in Health Check"
 var nilResultErrorMsg = "Result should be nil but is not"
 
@@ -31,11 +36,12 @@ func TestRandomStateLength(t *testing.T) {
 func TestRandomStateLengthZero(t *testing.T) {
 	client, _ := NewClient(clientId, clientSecret, apiHost, redirectUri)
 	output, err := client.generateStateWithLength(0)
-	if err != nil {
-		t.Error(err)
+	if err.Error() != "Length needs to be at least 22" {
+		t.Error("Did not receive expected error message")
 	}
-	if len(output) != 0 {
-		t.Errorf("Expected output of length 0, got '%d'", len(output))
+
+	if output != "" {
+		t.Error("Expected result to be empty, got " + output)
 	}
 }
 
@@ -221,5 +227,66 @@ func TestHealthCheckError(t *testing.T) {
 	}
 	if err.Error() != "404 Not Found" {
 		t.Error("Expected \"404 Not Found\" but got " + err.Error())
+	}
+}
+
+func TestCreateAuthURLSuccess(t *testing.T) {
+	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
+	result, err := duoClient.createAuthURL(username, state)
+	if err != nil {
+		t.Error("Unexpected error from createAuthUrl" + err.Error())
+	}
+	if !strings.HasPrefix(result, "https://api-deadbeef.duosecurity.com/oauth/v1/authorize?client_id=DIXXXXXXXXXXXXXXXXXX&request=") {
+		t.Error("URL doesn't match expected prefix: " + result)
+	}
+
+	base, err := url.Parse(result)
+	requestString := base.Query().Get("request")
+	token, err := jwt.Parse(
+		requestString,
+		func(token *jwt.Token) (interface{}, error) {
+			return []byte(clientSecret), nil
+		},
+	)
+
+	if !token.Valid {
+		t.Error("Expected token to be valid")
+	}
+}
+
+func TestCreateAuthURLMissingUsername(t *testing.T) {
+	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
+	result, err := duoClient.createAuthURL("", state)
+	if result != "" {
+		t.Error("Expected result to be empty but got " + result)
+	}
+	if err.Error() != "The username is invalid." {
+		t.Error("Expected 'The username is invalid.' but got " + err.Error())
+	}
+}
+
+func TestCreateAuthURLShortState(t *testing.T) {
+	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
+	result, err := duoClient.createAuthURL(username, "deadbeef")
+	if result != "" {
+		t.Error("Expected result to be empty but got " + result)
+	}
+	if err.Error() != "State must be at least 22 characters long and no longer than 1024 characters" {
+		t.Error("Expected 'State must be at least 22 characters long and no longer than 1024 characters' but got " + err.Error())
+	}
+}
+
+func TestCreateAuthURLLongState(t *testing.T) {
+	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
+	longState := strings.Repeat("a", 1025)
+	result, err := duoClient.createAuthURL(username, longState)
+	if result != "" {
+		t.Error("Expected result to be empty but got " + result)
+	}
+	if err == nil {
+		t.Error("Expected err to not be nil")
+	}
+	if err.Error() != "State must be at least 22 characters long and no longer than 1024 characters" {
+		t.Error("Expected 'State must be at least 22 characters long and no longer than 1024 characters' but got " + err.Error())
 	}
 }

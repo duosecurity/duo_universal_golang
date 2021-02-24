@@ -17,11 +17,15 @@ import (
 )
 
 const defaultStateLength = 36
+const minimumStateLength = 22
+const maximumStateLength = 1024
 const defaultJtiLength = 36
 const clientIdLength = 20
 const clientSecretLength = 40
 const expirationTime = 300
 const healthCheckEndpoint = "https://%s/oauth/v1/health_check"
+const oauthV1AuthorizeEndpoint = "https://%s/oauth/v1/authorize"
+const apiHostURIFormat = "https://%s"
 
 // StateCharacters is the set of possible characters used in the random state
 const stateCharacters = "abcdefghijklmnopqrstuvwxyz" +
@@ -29,6 +33,10 @@ const stateCharacters = "abcdefghijklmnopqrstuvwxyz" +
 	"1234567890"
 const clientIdError = "The Duo client id is invalid."
 const clientSecretError = "The Duo client secret is invalid."
+const usernameError = "The username is invalid."
+
+var stateLengthError = fmt.Sprintf("State must be at least %d characters long and no longer than %d characters", minimumStateLength, maximumStateLength)
+var generateStateLengthError = fmt.Sprintf("Length needs to be at least %d", minimumStateLength)
 
 type HealthCheckTime struct {
 	Time int `json:"time"`
@@ -90,6 +98,10 @@ func (client *Client) generateState() (string, error) {
 // suitable for use in state values.
 // length is the number of characters in the randomly generated string
 func (client *Client) generateStateWithLength(length int) (string, error) {
+	if length < minimumStateLength {
+		return "", fmt.Errorf(generateStateLengthError)
+	}
+
 	result := make([]byte, length)
 	possibleCharacters := int64(len(stateCharacters))
 	for i := range result {
@@ -109,12 +121,13 @@ func (client *Client) _createJwtArgs(aud string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	claims := jwt.MapClaims{}
-	claims["iss"] = client.clientId
-	claims["sub"] = client.clientId
-	claims["aud"] = aud
-	claims["exp"] = time.Now().Add(time.Second * time.Duration(expirationTime)).Unix()
-	claims["jti"] = jti
+	claims := jwt.MapClaims{
+		"iss": client.clientId,
+		"sub": client.clientId,
+		"aud": aud,
+		"exp": time.Now().Add(time.Second * time.Duration(expirationTime)).Unix(),
+		"jti": jti,
+	}
 
 	jwtSigned := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
 	token, err := jwtSigned.SignedString([]byte(client.clientSecret))
@@ -138,7 +151,7 @@ func (client *Client) _makeHttpRequest(e string, p url.Values) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf(resp.Status)
+		return nil, fmt.Errorf("%s", resp.Status)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
@@ -171,10 +184,63 @@ func (client *Client) healthCheck() (*HealthCheckResponse, error) {
 		return nil, err
 	}
 	if healthCheckResponse.Stat != "OK" {
-		return nil, fmt.Errorf(healthCheckResponse.Message + ": " + healthCheckResponse.MessageDetail)
+		return nil, fmt.Errorf("%s: %s", healthCheckResponse.Message, healthCheckResponse.MessageDetail)
 	}
 
 	return healthCheckResponse, nil
+}
+
+func (client *Client) createAuthURL(username string, state string) (string, error) {
+
+	err := validateClientCreateAuthURLInputs(username, state)
+	if err != nil {
+		return "", err
+	}
+
+	authorizeEndpoint := fmt.Sprintf(oauthV1AuthorizeEndpoint, client.apiHost)
+
+	claims := jwt.MapClaims{
+		"scope":                  "openid",
+		"redirect_uri":           client.redirectUri,
+		"client_id":              client.clientId,
+		"iss":                    client.clientId,
+		"aud":                    fmt.Sprintf(apiHostURIFormat, client.apiHost),
+		"exp":                    time.Now().Add(time.Second * time.Duration(expirationTime)).Unix(),
+		"state":                  state,
+		"response_type":          "code",
+		"duo_uname":              username,
+		"use_duo_code_attribute": true,
+	}
+
+	requestJWTUnsigned := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
+	requestJWTSigned, err := requestJWTUnsigned.SignedString([]byte(client.clientSecret))
+	if err != nil {
+		return "", err
+	}
+
+	params := url.Values{}
+	params.Add("response_type", "code")
+	params.Add("client_id", client.clientId)
+	params.Add("request", requestJWTSigned)
+
+	base, err := url.Parse(authorizeEndpoint)
+	base.RawQuery = params.Encode()
+	authorizationURI := base.String()
+
+	return authorizationURI, nil
+}
+
+func validateClientCreateAuthURLInputs(username string, state string) error {
+	stateLength := len(state)
+	if stateLength < minimumStateLength || stateLength > maximumStateLength {
+		return fmt.Errorf(stateLengthError)
+	}
+
+	if username == "" {
+		return fmt.Errorf(usernameError)
+	}
+
+	return nil
 }
 
 const duoPinnedCert string = `
