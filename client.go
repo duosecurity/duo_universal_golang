@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/form3tech-oss/jwt-go"
 )
 
 const defaultStateLength = 36
@@ -26,6 +26,8 @@ const expirationTime = 300
 const healthCheckEndpoint = "https://%s/oauth/v1/health_check"
 const oauthV1AuthorizeEndpoint = "https://%s/oauth/v1/authorize"
 const apiHostURIFormat = "https://%s"
+const tokenEndpoint = "https://%s/oauth/v1/token"
+const clientAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 
 // StateCharacters is the set of possible characters used in the random state
 const stateCharacters = "abcdefghijklmnopqrstuvwxyz" +
@@ -37,6 +39,12 @@ const usernameError = "The username is invalid."
 
 var stateLengthError = fmt.Sprintf("State must be at least %d characters long and no longer than %d characters", minimumStateLength, maximumStateLength)
 var generateStateLengthError = fmt.Sprintf("Length needs to be at least %d", minimumStateLength)
+const parameterError = "Did not recieve expected parameters."
+const usernameError = "Usernames do not match."
+const nonceError = "The nonce is invalid."
+const signatureError = "Invalid signature"
+const jwtResponseError = "JWT Verification failed"
+const duoCodeError = "Missing authorization code"
 
 type HealthCheckTime struct {
 	Time int `json:"time"`
@@ -48,6 +56,84 @@ type HealthCheckResponse struct {
 	MessageDetail string          `json:"message_detail"`
 	Response      HealthCheckTime `json:"response"`
 	Code          int             `json:"code"`
+}
+
+type BodyToken struct {
+	IdToken     string `json:"id_token"`
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+	TokenType   string `json:"token_type"`
+}
+
+type AuthResultInfo struct {
+	Result    string `json:"result"`
+	Status    string `json:"status"`
+	StatusMsg string `json:"status_msg"`
+}
+
+type LocationInfo struct {
+	City    string `json:"city"`
+	Country string `json:"country"`
+	State   string `json:"state"`
+}
+
+type AccessDeviceInfo struct {
+	Browser             string       `json:"browser"`
+	BrowserVersion      string       `json:"browser_version"`
+	FlashVersion        string       `json:"flash_version"`
+	Hostname            string       `json:"host_name"`
+	Ip                  string       `json:"ip"`
+	IsEncryptionEnabled string       `json:"is_encryption_enabled"`
+	IsFirewallEnabled   string       `json:"is_firewall_enabled"`
+	IsPasswordSet       string       `json:"is_password_set"`
+	JavaVersion         string       `json:"java_version"`
+	Location            LocationInfo `json:"location"`
+	Os                  string       `json:"os"`
+	OsVersion           string       `json:"os_version"`
+}
+
+type AuthDeviceInfo struct {
+	Ip       string       `json:"ip"`
+	Location LocationInfo `json:"location"`
+	Name     string       `json:"name"`
+}
+
+type ApplicationInfo struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
+}
+
+type UserInfo struct {
+	Groups []string `json:"groups"`
+	Key    string   `json:"key"`
+	Name   string   `json:"name"`
+}
+
+type AuthContextInfo struct {
+	AccessDevice AccessDeviceInfo `json:"access_device"`
+	Alias        string           `json:"alias"`
+	Application  ApplicationInfo  `json:"application"`
+	AuthDevice   AuthDeviceInfo   `json:"auth_device"`
+	Email        string           `json:"email"`
+	EventType    string           `json:"event_type"`
+	Factor       string           `json:"factor"`
+	Isotimestamp string           `json:"isotimestamp"`
+	OodSoftware  string           `json:"ood_software"`
+	Reason       string           `json:"reason"`
+	Result       string           `json:"result"`
+	Timestamp    int              `json:"timestamp"`
+	Txid         string           `json:"txid"`
+	User         UserInfo         `json:"user"`
+}
+
+type TokenResponse struct {
+	PreferredUsername string          `json:"preferred_username"`
+	AuthTime          int             `json:"auth_time"`
+	Nonce             string          `json:"nonce"`
+	AuthResult        AuthResultInfo  `json:"auth_result"`
+	AuthContext       AuthContextInfo `json:"auth_context"`
+	Audience          string          `json:"aud"`
+	jwt.StandardClaims
 }
 
 type Client struct {
@@ -241,6 +327,67 @@ func validateClientCreateAuthURLInputs(username string, state string) error {
 	}
 
 	return nil
+
+func (client *Client) exchangeAuthorizationCodeFor2faResult(duoCode string, username string) (*TokenResponse, error) {
+	return client.exchangeAuthorizationCodeFor2faResultWithNonce(duoCode, username, "")
+}
+
+// Exchange the duo_code for a token with Duo to determine if the auth was successful.
+func (client *Client) exchangeAuthorizationCodeFor2faResultWithNonce(duoCode string, username string, nonce string) (*TokenResponse, error) {
+    if duoCode == "" {
+        return nil, fmt.Errorf(duoCodeError)
+    }
+	tokenUrl := fmt.Sprintf(tokenEndpoint, client.apiHost)
+	postParams := url.Values{}
+	bodyToken := &BodyToken{}
+	jwtToken, err := client._createJwtArgs(tokenUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	postParams.Add("redirect_uri", client.redirectUri)
+	postParams.Add("grant_type", "authorization_code")
+	postParams.Add("code", duoCode)
+	postParams.Add("client_id", client.clientId)
+	postParams.Add("client_assertion_type", clientAssertionType)
+	postParams.Add("client_assertion", jwtToken)
+
+	body, err := client._makeHttpRequest(tokenUrl, postParams)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(body, bodyToken)
+	if err != nil {
+		return nil, err
+	}
+	if bodyToken.AccessToken == "" || bodyToken.IdToken == "" ||
+		bodyToken.ExpiresIn == 0 || bodyToken.TokenType == "" {
+		return nil, fmt.Errorf(parameterError)
+	}
+
+	// Parse signed JWT into TokenResponse
+	returnToken, err := jwt.ParseWithClaims(bodyToken.IdToken, &TokenResponse{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(client.clientSecret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	jwtResponse := returnToken.Claims.(*TokenResponse)
+	if returnToken.Method != jwt.SigningMethodHS512 {
+		return nil, fmt.Errorf(signatureError)
+	}
+	if jwtResponse.PreferredUsername != username {
+		return nil, fmt.Errorf(usernameError)
+	}
+	if nonce != "" && jwtResponse.Nonce != nonce {
+		return nil, fmt.Errorf(nonceError)
+	}
+    if !jwtResponse.StandardClaims.VerifyIssuer(fmt.Sprintf(tokenEndpoint, client.apiHost), false) ||
+		jwtResponse.Audience != client.clientId {
+		return nil, fmt.Errorf(jwtResponseError)
+	}
+	return jwtResponse, nil
 }
 
 const duoPinnedCert string = `
