@@ -1,6 +1,7 @@
 package duouniversal
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -45,6 +47,7 @@ const duoCodeError = "Missing authorization code"
 
 var stateLengthError = fmt.Sprintf("State must be at least %d characters long and no longer than %d characters", minimumStateLength, maximumStateLength)
 var generateStateLengthError = fmt.Sprintf("Length needs to be at least %d", minimumStateLength)
+const httpUseError = "This client does not allow use of http, please use https"
 
 type HealthCheckTime struct {
 	Time int `json:"time"`
@@ -148,6 +151,27 @@ type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+// Blocks HTTP requests
+func refuseHttpConnection(ctx context.Context, network, address string) (net.Conn, error) {
+	return nil, fmt.Errorf(httpUseError)
+}
+
+// Creates a http.Transport that pins certs to Duo and refuses HTTP connections
+func newStrictTLSTransport() *http.Transport {
+	certPool := x509.NewCertPool()
+	certPool.AppendCertsFromPEM([]byte(duoPinnedCert))
+
+	tlsDialer := &tls.Dialer{
+		Config: &tls.Config{
+			RootCAs: certPool,
+		},
+	}
+	return &http.Transport{
+		DialContext:    refuseHttpConnection,
+		DialTLSContext: tlsDialer.DialContext,
+	}
+}
+
 func NewClient(clientId, clientSecret, apiHost, redirectUri string) (*Client, error) {
 	if len(clientId) != clientIdLength {
 		return nil, fmt.Errorf(clientIdError)
@@ -155,21 +179,13 @@ func NewClient(clientId, clientSecret, apiHost, redirectUri string) (*Client, er
 		return nil, fmt.Errorf(clientSecretError)
 	}
 
-	// Certificate pinning
-	certPool := x509.NewCertPool()
-	certPool.AppendCertsFromPEM([]byte(duoPinnedCert))
-
 	return &Client{
 		clientId:     clientId,
 		clientSecret: clientSecret,
 		apiHost:      apiHost,
 		redirectUri:  redirectUri,
 		duoHttpClient: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					RootCAs: certPool,
-				},
-			},
+			Transport: newStrictTLSTransport(),
 		},
 	}, nil
 }

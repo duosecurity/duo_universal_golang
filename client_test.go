@@ -476,6 +476,30 @@ func TestExchangeCodeFor2FABadSigningMethod(t *testing.T) {
 	}
 }
 
+func TestBlockHttpRequests(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+	}))
+	defer ts.Close()
+
+	expectedError := "Post \"" + ts.URL + "\": " + httpUseError
+	duoClient, _ := NewClient(clientId, clientSecret, ts.URL, redirectUri)
+	duoClient.duoHttpClient = ts.Client()
+
+	ts.Client().Transport = newStrictTLSTransport()
+	result, err := duoClient._makeHttpRequest(ts.URL, nil)
+
+    if result != nil {
+		t.Error(nilResultErrorMsg)
+	}
+	if err == nil {
+		t.Error(nilErrErrorMsg)
+	}
+	if err.Error() != expectedError {
+		t.Error("Expected \"" + expectedError + "\" but got " + err.Error())
+	}
+}
+
 // Creates the return message for the test server
 func createServerResponseMessage(response, secret string, claims jwt.MapClaims, jwtSignature *jwt.SigningMethodHMAC) string {
 	jwtWithClaims := jwt.NewWithClaims(jwtSignature, claims)
