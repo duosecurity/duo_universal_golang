@@ -36,15 +36,15 @@ const stateCharacters = "abcdefghijklmnopqrstuvwxyz" +
 const clientIdError = "The Duo client id is invalid."
 const clientSecretError = "The Duo client secret is invalid."
 const usernameError = "The username is invalid."
-
-var stateLengthError = fmt.Sprintf("State must be at least %d characters long and no longer than %d characters", minimumStateLength, maximumStateLength)
-var generateStateLengthError = fmt.Sprintf("Length needs to be at least %d", minimumStateLength)
 const parameterError = "Did not recieve expected parameters."
-const usernameError = "Usernames do not match."
+const usernameMismatchError = "Usernames do not match."
 const nonceError = "The nonce is invalid."
 const signatureError = "Invalid signature"
 const jwtResponseError = "JWT Verification failed"
 const duoCodeError = "Missing authorization code"
+
+var stateLengthError = fmt.Sprintf("State must be at least %d characters long and no longer than %d characters", minimumStateLength, maximumStateLength)
+var generateStateLengthError = fmt.Sprintf("Length needs to be at least %d", minimumStateLength)
 
 type HealthCheckTime struct {
 	Time int `json:"time"`
@@ -83,9 +83,9 @@ type AccessDeviceInfo struct {
 	FlashVersion        string       `json:"flash_version"`
 	Hostname            string       `json:"host_name"`
 	Ip                  string       `json:"ip"`
-	IsEncryptionEnabled string       `json:"is_encryption_enabled"`
-	IsFirewallEnabled   string       `json:"is_firewall_enabled"`
-	IsPasswordSet       string       `json:"is_password_set"`
+	IsEncryptionEnabled bool         `json:"is_encryption_enabled"`
+	IsFirewallEnabled   bool         `json:"is_firewall_enabled"`
+	IsPasswordSet       bool         `json:"is_password_set"`
 	JavaVersion         string       `json:"java_version"`
 	Location            LocationInfo `json:"location"`
 	Os                  string       `json:"os"`
@@ -327,6 +327,7 @@ func validateClientCreateAuthURLInputs(username string, state string) error {
 	}
 
 	return nil
+}
 
 func (client *Client) exchangeAuthorizationCodeFor2faResult(duoCode string, username string) (*TokenResponse, error) {
 	return client.exchangeAuthorizationCodeFor2faResultWithNonce(duoCode, username, "")
@@ -334,9 +335,9 @@ func (client *Client) exchangeAuthorizationCodeFor2faResult(duoCode string, user
 
 // Exchange the duo_code for a token with Duo to determine if the auth was successful.
 func (client *Client) exchangeAuthorizationCodeFor2faResultWithNonce(duoCode string, username string, nonce string) (*TokenResponse, error) {
-    if duoCode == "" {
-        return nil, fmt.Errorf(duoCodeError)
-    }
+	if duoCode == "" {
+		return nil, fmt.Errorf(duoCodeError)
+	}
 	tokenUrl := fmt.Sprintf(tokenEndpoint, client.apiHost)
 	postParams := url.Values{}
 	bodyToken := &BodyToken{}
@@ -378,12 +379,12 @@ func (client *Client) exchangeAuthorizationCodeFor2faResultWithNonce(duoCode str
 		return nil, fmt.Errorf(signatureError)
 	}
 	if jwtResponse.PreferredUsername != username {
-		return nil, fmt.Errorf(usernameError)
+		return nil, fmt.Errorf(usernameMismatchError)
 	}
 	if nonce != "" && jwtResponse.Nonce != nonce {
 		return nil, fmt.Errorf(nonceError)
 	}
-    if !jwtResponse.StandardClaims.VerifyIssuer(fmt.Sprintf(tokenEndpoint, client.apiHost), false) ||
+	if !jwtResponse.StandardClaims.VerifyIssuer(fmt.Sprintf(tokenEndpoint, client.apiHost), false) ||
 		jwtResponse.Audience != client.clientId {
 		return nil, fmt.Errorf(jwtResponseError)
 	}

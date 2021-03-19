@@ -22,7 +22,6 @@ var badApiHost = "deadbeef.com"
 var redirectUri = "https://example.com"
 var state = "deadbeefdeadbeefdeadbeefdeadbeefdead"
 var username = "user1"
-var nilErrErrorMsg = "Did not recieve expected error in Health Check"
 var nonce = "abcdefghijklmnopqrstuvwxyz"
 var badNonce = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
 
@@ -48,7 +47,6 @@ var sigIsInvalid = "signature is invalid"
 var iatError = "Token used before issued"
 var expError = "token is expired by 5m0s"
 var duoCode = "abcdefghijklmnopqrstuvwxyz"
-var username = "username"
 var badUsername = "badUsername"
 
 func TestRandomStateLength(t *testing.T) {
@@ -289,6 +287,7 @@ func TestCreateAuthURLLongState(t *testing.T) {
 	if err.Error() != "State must be at least 22 characters long and no longer than 1024 characters" {
 		t.Error("Expected 'State must be at least 22 characters long and no longer than 1024 characters' but got " + err.Error())
 	}
+}
 
 func TestExchangeCodeFor2FAVerifyJWT(t *testing.T) {
 	testCases := []struct {
@@ -299,7 +298,7 @@ func TestExchangeCodeFor2FAVerifyJWT(t *testing.T) {
 		nonce       string
 		want        string
 	}{
-		{"badPreferredUsername", "preferred_username", badUsername, 0, "", usernameError},
+		{"badPreferredUsername", "preferred_username", badUsername, 0, "", usernameMismatchError},
 		{"badAud", "aud", badClientId, 0, "", jwtResponseError},
 		{"badIat", "iat", "", time.Now().Add(time.Second * time.Duration(expirationTime)).Unix(), "", iatError},
 		{"badExp", "exp", "", time.Now().Unix() - expirationTime, "", expError},
