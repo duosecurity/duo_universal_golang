@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -484,12 +485,12 @@ func TestBlockHttpRequests(t *testing.T) {
 
 	expectedError := "Post \"" + ts.URL + "\": " + httpUseError
 	duoClient, _ := NewClient(clientId, clientSecret, ts.URL, redirectUri)
+	ts.Client().Transport = newStrictTLSTransport()
 	duoClient.duoHttpClient = ts.Client()
 
-	ts.Client().Transport = newStrictTLSTransport()
-	result, err := duoClient._makeHttpRequest(ts.URL, nil)
+	result, err := duoClient._makeHttpRequest(ts.URL, "", nil)
 
-    if result != nil {
+	if result != nil {
 		t.Error(nilResultErrorMsg)
 	}
 	if err == nil {
@@ -497,6 +498,33 @@ func TestBlockHttpRequests(t *testing.T) {
 	}
 	if err.Error() != expectedError {
 		t.Error("Expected \"" + expectedError + "\" but got " + err.Error())
+	}
+}
+
+func TestSendUserAgent(t *testing.T) {
+	claims := copyGoodClaims()
+	ts := httptest.NewTLSServer(nil)
+	duoHost := strings.Split(ts.URL, "//")[1]
+	claims["iss"] = fmt.Sprintf(tokenEndpoint, duoHost)
+	m := createServerResponseMessage(tokenEndpointResponse, clientSecret, claims, jwt.SigningMethodHS512)
+	duoUserAgent := fmt.Sprintf("duo_universal_golang/%s Golang/%s %s/%s", duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	ts.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header["User-Agent"][0] == duoUserAgent {
+			fmt.Fprintln(w, m)
+		} else {
+			w.WriteHeader(404)
+		}
+	})
+	defer ts.Close()
+	duoClient, _ := NewClient(clientId, clientSecret, duoHost, redirectUri)
+	duoClient.duoHttpClient = ts.Client()
+	result, err := duoClient.exchangeAuthorizationCodeFor2faResult(duoCode, username)
+
+	if result == nil {
+		t.Error(nilResultErrorMsg)
+	}
+	if err != nil {
+		t.Error(nilErrErrorMsg)
 	}
 }
 

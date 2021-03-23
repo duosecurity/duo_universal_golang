@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 
@@ -44,10 +45,11 @@ const nonceError = "The nonce is invalid."
 const signatureError = "Invalid signature"
 const jwtResponseError = "JWT Verification failed"
 const duoCodeError = "Missing authorization code"
+const httpUseError = "This client does not allow use of http, please use https"
+const duoVersion = "0.0.1"
 
 var stateLengthError = fmt.Sprintf("State must be at least %d characters long and no longer than %d characters", minimumStateLength, maximumStateLength)
 var generateStateLengthError = fmt.Sprintf("Length needs to be at least %d", minimumStateLength)
-const httpUseError = "This client does not allow use of http, please use https"
 
 type HealthCheckTime struct {
 	Time int `json:"time"`
@@ -240,13 +242,16 @@ func (client *Client) _createJwtArgs(aud string) (string, error) {
 }
 
 // Makes HTTP request to Duo
-func (client *Client) _makeHttpRequest(e string, p url.Values) ([]byte, error) {
+func (client *Client) _makeHttpRequest(e, userAgent string, p url.Values) ([]byte, error) {
 	r, err := http.NewRequest(http.MethodPost, e, strings.NewReader(p.Encode()))
 	if err != nil {
 		return nil, err
 	}
 
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	if userAgent != "" {
+		r.Header.Set("User-Agent", userAgent)
+	}
 	resp, err := client.duoHttpClient.Do(r)
 	if err != nil {
 		return nil, err
@@ -276,7 +281,7 @@ func (client *Client) healthCheck() (*HealthCheckResponse, error) {
 
 	postParams.Add("client_assertion", token)
 	postParams.Add("client_id", client.clientId)
-	body, err := client._makeHttpRequest(healthCheckUrl, postParams)
+	body, err := client._makeHttpRequest(healthCheckUrl, "", postParams)
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +374,9 @@ func (client *Client) exchangeAuthorizationCodeFor2faResultWithNonce(duoCode str
 	postParams.Add("client_assertion_type", clientAssertionType)
 	postParams.Add("client_assertion", jwtToken)
 
-	body, err := client._makeHttpRequest(tokenUrl, postParams)
+	duoUserAgent := fmt.Sprintf("duo_universal_golang/%s Golang/%s %s/%s", duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+
+	body, err := client._makeHttpRequest(tokenUrl, duoUserAgent, postParams)
 	if err != nil {
 		return nil, err
 	}
