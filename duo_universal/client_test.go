@@ -52,7 +52,7 @@ var badUsername = "badUsername"
 
 func TestRandomStateLength(t *testing.T) {
 	client, _ := NewClient(clientId, clientSecret, apiHost, redirectUri)
-	output, err := client.generateStateWithLength(100)
+	output, err := client.GenerateStateWithLength(100)
 	if err != nil {
 		t.Error(err)
 	}
@@ -63,7 +63,7 @@ func TestRandomStateLength(t *testing.T) {
 
 func TestRandomStateLengthZero(t *testing.T) {
 	client, _ := NewClient(clientId, clientSecret, apiHost, redirectUri)
-	output, err := client.generateStateWithLength(0)
+	output, err := client.GenerateStateWithLength(0)
 	if err.Error() != "Length needs to be at least 22" {
 		t.Error("Did not receive expected error message")
 	}
@@ -75,11 +75,11 @@ func TestRandomStateLengthZero(t *testing.T) {
 
 func TestRandomStateLengthRandom(t *testing.T) {
 	client, _ := NewClient(clientId, clientSecret, apiHost, redirectUri)
-	output1, err := client.generateStateWithLength(60)
+	output1, err := client.GenerateStateWithLength(60)
 	if err != nil {
 		t.Error(err)
 	}
-	output2, err := client.generateStateWithLength(60)
+	output2, err := client.GenerateStateWithLength(60)
 	if err != nil {
 		t.Error(err)
 	}
@@ -90,7 +90,7 @@ func TestRandomStateLengthRandom(t *testing.T) {
 
 func TestRandomStateDefaultLength(t *testing.T) {
 	client, _ := NewClient(clientId, clientSecret, apiHost, redirectUri)
-	output, err := client.generateState()
+	output, err := client.GenerateState()
 	if err != nil {
 		t.Error(err)
 	}
@@ -217,7 +217,7 @@ func TestHealthCheckError(t *testing.T) {
 	duoClient, err := NewClient(clientId, clientSecret, duoHost, redirectUri)
 	duoClient.duoHttpClient = ts.Client()
 
-	result, err := duoClient.healthCheck()
+	result, err := duoClient.HealthCheck()
 	if result != nil {
 		t.Error(nilResultErrorMsg)
 	}
@@ -231,7 +231,7 @@ func TestHealthCheckError(t *testing.T) {
 
 func TestCreateAuthURLSuccess(t *testing.T) {
 	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
-	result, err := duoClient.createAuthURL(username, state)
+	result, err := duoClient.CreateAuthURL(username, state)
 	if err != nil {
 		t.Error("Unexpected error from createAuthUrl" + err.Error())
 	}
@@ -255,7 +255,7 @@ func TestCreateAuthURLSuccess(t *testing.T) {
 
 func TestCreateAuthURLMissingUsername(t *testing.T) {
 	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
-	result, err := duoClient.createAuthURL("", state)
+	result, err := duoClient.CreateAuthURL("", state)
 	if result != "" {
 		t.Error("Expected result to be empty but got " + result)
 	}
@@ -266,7 +266,7 @@ func TestCreateAuthURLMissingUsername(t *testing.T) {
 
 func TestCreateAuthURLShortState(t *testing.T) {
 	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
-	result, err := duoClient.createAuthURL(username, "deadbeef")
+	result, err := duoClient.CreateAuthURL(username, "deadbeef")
 	if result != "" {
 		t.Error("Expected result to be empty but got " + result)
 	}
@@ -278,7 +278,7 @@ func TestCreateAuthURLShortState(t *testing.T) {
 func TestCreateAuthURLLongState(t *testing.T) {
 	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
 	longState := strings.Repeat("a", 1025)
-	result, err := duoClient.createAuthURL(username, longState)
+	result, err := duoClient.CreateAuthURL(username, longState)
 	if result != "" {
 		t.Error("Expected result to be empty but got " + result)
 	}
@@ -348,7 +348,7 @@ func TestExchangeCodeFor2FANoCode(t *testing.T) {
 	defer ts.Close()
 	duoClient, _ := NewClient(clientId, clientSecret, duoHost, redirectUri)
 	duoClient.duoHttpClient = ts.Client()
-	result, err := duoClient.exchangeAuthorizationCodeFor2faResult("", username)
+	result, err := duoClient.ExchangeAuthorizationCodeFor2faResult("", username)
 
 	if result != nil {
 		t.Error(nilResultErrorMsg)
@@ -542,7 +542,7 @@ func createServerResponseMessage(response, secret string, claims jwt.MapClaims, 
 	return response
 }
 
-// Spin up a test server, create a Duo Client, and make a healthCheck call
+// Spin up a test server, create a Duo Client, and make a HealthCheck call
 func callHealthCheck(m string) (*HealthCheckResponse, error) {
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, m)
@@ -552,11 +552,11 @@ func callHealthCheck(m string) (*HealthCheckResponse, error) {
 	duoHost := strings.Split(ts.URL, "//")[1]
 	duoClient, _ := NewClient(clientId, clientSecret, duoHost, redirectUri)
 	duoClient.duoHttpClient = ts.Client()
-	result, err := duoClient.healthCheck()
+	result, err := duoClient.HealthCheck()
 	return result, err
 }
 
-// Spin up a test server, create a Duo Client, and make an exchangeAuthorizationCodeFor2faResultWithNonce call
+// Spin up a test server, create a Duo Client, and make an ExchangeAuthorizationCodeFor2faResultWithNonce call
 func callExchangeAuthorization(response, secret, n string, claims jwt.MapClaims, jwtSignature *jwt.SigningMethodHMAC) (*TokenResponse, error) {
 	ts := httptest.NewTLSServer(nil)
 	duoHost := strings.Split(ts.URL, "//")[1]
@@ -570,7 +570,7 @@ func callExchangeAuthorization(response, secret, n string, claims jwt.MapClaims,
 	defer ts.Close()
 	duoClient, _ := NewClient(clientId, clientSecret, duoHost, redirectUri)
 	duoClient.duoHttpClient = ts.Client()
-	result, err := duoClient.exchangeAuthorizationCodeFor2faResultWithNonce(duoCode, username, n)
+	result, err := duoClient.ExchangeAuthorizationCodeFor2faResultWithNonce(duoCode, username, n)
 	return result, err
 }
 

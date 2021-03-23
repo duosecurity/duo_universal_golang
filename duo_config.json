@@ -1,0 +1,7 @@
+{
+    "clientId": "",
+    "clientSecret": "",
+    "apiHost": "",
+    "redirectUri": "http://localhost:8080/duo-callback",
+    "failmode": "closed"
+}

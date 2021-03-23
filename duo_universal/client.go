@@ -194,14 +194,14 @@ func NewClient(clientId, clientSecret, apiHost, redirectUri string) (*Client, er
 
 // Return a cryptographically-secure string of random characters
 // with the default length
-func (client *Client) generateState() (string, error) {
-	return client.generateStateWithLength(defaultStateLength)
+func (client *Client) GenerateState() (string, error) {
+	return client.GenerateStateWithLength(defaultStateLength)
 }
 
 // Return a cryptographically-secure string of random characters
 // suitable for use in state values.
 // length is the number of characters in the randomly generated string
-func (client *Client) generateStateWithLength(length int) (string, error) {
+func (client *Client) GenerateStateWithLength(length int) (string, error) {
 	if length < minimumStateLength {
 		return "", fmt.Errorf(generateStateLengthError)
 	}
@@ -220,8 +220,8 @@ func (client *Client) generateStateWithLength(length int) (string, error) {
 
 // Creates a JWT token used for the "client_assertion" parameter in the health check
 // and "requset" parameter in the token endpoint
-func (client *Client) _createJwtArgs(aud string) (string, error) {
-	jti, err := client.generateStateWithLength(defaultJtiLength)
+func (client *Client) createJwtArgs(aud string) (string, error) {
+	jti, err := client.GenerateStateWithLength(defaultJtiLength)
 	if err != nil {
 		return "", err
 	}
@@ -269,12 +269,12 @@ func (client *Client) _makeHttpRequest(e, userAgent string, p url.Values) ([]byt
 }
 
 // Checks whether or not Duo is available.
-func (client *Client) healthCheck() (*HealthCheckResponse, error) {
+func (client *Client) HealthCheck() (*HealthCheckResponse, error) {
 	postParams := url.Values{}
 	healthCheckResponse := &HealthCheckResponse{}
 	healthCheckUrl := fmt.Sprintf(healthCheckEndpoint, client.apiHost)
 
-	token, err := client._createJwtArgs(healthCheckUrl)
+	token, err := client.createJwtArgs(healthCheckUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +297,7 @@ func (client *Client) healthCheck() (*HealthCheckResponse, error) {
 	return healthCheckResponse, nil
 }
 
-func (client *Client) createAuthURL(username string, state string) (string, error) {
+func (client *Client) CreateAuthURL(username string, state string) (string, error) {
 
 	err := validateClientCreateAuthURLInputs(username, state)
 	if err != nil {
@@ -350,19 +350,19 @@ func validateClientCreateAuthURLInputs(username string, state string) error {
 	return nil
 }
 
-func (client *Client) exchangeAuthorizationCodeFor2faResult(duoCode string, username string) (*TokenResponse, error) {
-	return client.exchangeAuthorizationCodeFor2faResultWithNonce(duoCode, username, "")
+func (client *Client) ExchangeAuthorizationCodeFor2faResult(duoCode string, username string) (*TokenResponse, error) {
+	return client.ExchangeAuthorizationCodeFor2faResultWithNonce(duoCode, username, "")
 }
 
 // Exchange the duo_code for a token with Duo to determine if the auth was successful.
-func (client *Client) exchangeAuthorizationCodeFor2faResultWithNonce(duoCode string, username string, nonce string) (*TokenResponse, error) {
+func (client *Client) ExchangeAuthorizationCodeFor2faResultWithNonce(duoCode string, username string, nonce string) (*TokenResponse, error) {
 	if duoCode == "" {
 		return nil, fmt.Errorf(duoCodeError)
 	}
 	tokenUrl := fmt.Sprintf(tokenEndpoint, client.apiHost)
 	postParams := url.Values{}
 	bodyToken := &BodyToken{}
-	jwtToken, err := client._createJwtArgs(tokenUrl)
+	jwtToken, err := client.createJwtArgs(tokenUrl)
 	if err != nil {
 		return nil, err
 	}
