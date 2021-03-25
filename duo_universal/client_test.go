@@ -26,6 +26,12 @@ var username = "user1"
 var nonce = "abcdefghijklmnopqrstuvwxyz"
 var badNonce = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
 
+type JWTClass struct {
+	UseDuoCodeAttribute bool   `json:"use_duo_code_attribute"`
+	Audience            string `json:"aud"`
+	jwt.StandardClaims
+}
+
 var tokenEndpointResponse = `
         {
             "expires_in": 12345678,
@@ -287,6 +293,38 @@ func TestCreateAuthURLLongState(t *testing.T) {
 	}
 	if err.Error() != "State must be at least 22 characters long and no longer than 1024 characters" {
 		t.Error("Expected 'State must be at least 22 characters long and no longer than 1024 characters' but got " + err.Error())
+	}
+}
+
+func TestCreateAuthURLDuoCodeAttribute(t *testing.T) {
+	duoClientDuoCode, _ := NewClient(clientId, clientSecret, apiHost, redirectUri)
+	duoClientNoDuoCode, _ := NewClientDuoCodeAttribute(clientId, clientSecret, apiHost, redirectUri, false)
+	testCases := []struct {
+		name      string
+		duoClient *Client
+		expected  bool
+	}{
+		{"With Duo Code", duoClientDuoCode, true},
+		{"Without Duo Code", duoClientNoDuoCode, false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := tc.duoClient.createAuthURL(username, state)
+			urlResult, _ := url.Parse(result)
+			urlVals, _ := url.ParseQuery(urlResult.RawQuery)
+			request := urlVals["request"][0]
+			returnToken, err := jwt.ParseWithClaims(request, &JWTClass{}, func(token *jwt.Token) (interface{}, error) {
+				return []byte(clientSecret), nil
+			})
+			parsedClaims := returnToken.Claims.(*JWTClass)
+			if parsedClaims.UseDuoCodeAttribute != tc.expected {
+				errMsg := fmt.Sprintf("Expected result to be %v but got %v", tc.expected, parsedClaims.UseDuoCodeAttribute)
+				t.Error(errMsg)
+			}
+			if err != nil {
+				t.Error("Expected err to be nil but got " + err.Error())
+			}
+		})
 	}
 }
 

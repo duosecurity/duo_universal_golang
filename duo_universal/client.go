@@ -142,11 +142,12 @@ type TokenResponse struct {
 }
 
 type Client struct {
-	clientId      string
-	clientSecret  string
-	apiHost       string
-	redirectUri   string
-	duoHttpClient httpClient
+	clientId            string
+	clientSecret        string
+	apiHost             string
+	redirectUri         string
+	useDuoCodeAttribute bool
+	duoHttpClient       httpClient
 }
 
 type httpClient interface {
@@ -175,6 +176,11 @@ func newStrictTLSTransport() *http.Transport {
 }
 
 func NewClient(clientId, clientSecret, apiHost, redirectUri string) (*Client, error) {
+	return NewClientDuoCodeAttribute(clientId, clientSecret, apiHost, redirectUri, true)
+}
+
+// Creates a new Client with the ability to turn off use_duo_code_attribute
+func NewClientDuoCodeAttribute(clientId, clientSecret, apiHost, redirectUri string, useDuoCodeAttribute bool) (*Client, error) {
 	if len(clientId) != clientIdLength {
 		return nil, fmt.Errorf(clientIdError)
 	} else if len(clientSecret) != clientSecretLength {
@@ -182,10 +188,11 @@ func NewClient(clientId, clientSecret, apiHost, redirectUri string) (*Client, er
 	}
 
 	return &Client{
-		clientId:     clientId,
-		clientSecret: clientSecret,
-		apiHost:      apiHost,
-		redirectUri:  redirectUri,
+		clientId:            clientId,
+		clientSecret:        clientSecret,
+		apiHost:             apiHost,
+		redirectUri:         redirectUri,
+		useDuoCodeAttribute: useDuoCodeAttribute,
 		duoHttpClient: &http.Client{
 			Transport: newStrictTLSTransport(),
 		},
@@ -316,7 +323,7 @@ func (client *Client) CreateAuthURL(username string, state string) (string, erro
 		"state":                  state,
 		"response_type":          "code",
 		"duo_uname":              username,
-		"use_duo_code_attribute": true,
+		"use_duo_code_attribute": client.useDuoCodeAttribute,
 	}
 
 	requestJWTUnsigned := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
