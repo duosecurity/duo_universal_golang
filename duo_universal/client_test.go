@@ -2,7 +2,6 @@ package duouniversal
 
 import (
 	"fmt"
-	"github.com/form3tech-oss/jwt-go"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -26,12 +25,6 @@ var username = "user1"
 var nonce = "abcdefghijklmnopqrstuvwxyz"
 var badNonce = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
 
-type JWTClass struct {
-	UseDuoCodeAttribute bool   `json:"use_duo_code_attribute"`
-	Audience            string `json:"aud"`
-	jwt.StandardClaims
-}
-
 var tokenEndpointResponse = `
         {
             "expires_in": 12345678,
@@ -40,19 +33,25 @@ var tokenEndpointResponse = `
             "token_type": "type"
         }`
 
-var goodClaims = jwt.MapClaims{
+var goodClaims = MapClaims{
 	"preferred_username": username,
 	"auth_time":          time.Now().Unix(),
 	"iss":                "",
 	"aud":                clientId,
 	"exp":                time.Now().Add(time.Second * time.Duration(expirationTime)).Unix(),
 	"iat":                time.Now().Unix(),
+	"nonce":              "",
 }
+
+const (
+	correctSignatureAlgorithm string = "HS512"
+	wrongSignatureAlgorithm   string = "HS256"
+)
+
 var nilErrErrorMsg = "Did not recieve expected error"
 var nilResultErrorMsg = "Result should be nil but is not"
-var sigIsInvalid = "signature is invalid"
-var iatError = "Token used before issued"
-var expError = "token is expired by 5m0s"
+var sigIsInvalid = "failed to verify jws signature: failed to verify message: failed to match hmac signature"
+var notSatisfiedError = "%s not satisfied"
 var duoCode = "abcdefghijklmnopqrstuvwxyz"
 var badUsername = "badUsername"
 
@@ -220,7 +219,7 @@ func TestHealthCheckError(t *testing.T) {
 	defer ts.Close()
 
 	duoHost := strings.Split(ts.URL, "//")[1]
-	duoClient, err := NewClient(clientId, clientSecret, duoHost, redirectUri)
+	duoClient, _ := NewClient(clientId, clientSecret, duoHost, redirectUri)
 	duoClient.duoHttpClient = ts.Client()
 
 	result, err := duoClient.HealthCheck()
@@ -236,7 +235,7 @@ func TestHealthCheckError(t *testing.T) {
 }
 
 func TestCreateAuthURLSuccess(t *testing.T) {
-	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
+	duoClient, _ := NewClient(clientId, clientSecret, apiHost, redirectUri)
 	result, err := duoClient.CreateAuthURL(username, state)
 	if err != nil {
 		t.Error("Unexpected error from createAuthUrl" + err.Error())
@@ -245,22 +244,23 @@ func TestCreateAuthURLSuccess(t *testing.T) {
 		t.Error("URL doesn't match expected prefix: " + result)
 	}
 
-	base, err := url.Parse(result)
+	base, _ := url.Parse(result)
 	requestString := base.Query().Get("request")
-	token, err := jwt.Parse(
-		requestString,
-		func(token *jwt.Token) (interface{}, error) {
-			return []byte(clientSecret), nil
-		},
-	)
 
-	if !token.Valid {
-		t.Error("Expected token to be valid")
+	token, err := jwtParseAndValidate(requestString, clientSecret, MapClaims{
+		"aud": fmt.Sprintf("https://%s", apiHost),
+		"iss": clientId,
+	})
+	if err != nil {
+		t.Error("Expected token to be valid, got err: " + err.Error())
+	}
+	if token == nil {
+		t.Error("Expected token to be valid, got nil")
 	}
 }
 
 func TestCreateAuthURLMissingUsername(t *testing.T) {
-	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
+	duoClient, _ := NewClient(clientId, clientSecret, apiHost, redirectUri)
 	result, err := duoClient.CreateAuthURL("", state)
 	if result != "" {
 		t.Error("Expected result to be empty but got " + result)
@@ -271,7 +271,7 @@ func TestCreateAuthURLMissingUsername(t *testing.T) {
 }
 
 func TestCreateAuthURLShortState(t *testing.T) {
-	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
+	duoClient, _ := NewClient(clientId, clientSecret, apiHost, redirectUri)
 	result, err := duoClient.CreateAuthURL(username, "deadbeef")
 	if result != "" {
 		t.Error("Expected result to be empty but got " + result)
@@ -282,7 +282,7 @@ func TestCreateAuthURLShortState(t *testing.T) {
 }
 
 func TestCreateAuthURLLongState(t *testing.T) {
-	duoClient, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
+	duoClient, _ := NewClient(clientId, clientSecret, apiHost, redirectUri)
 	longState := strings.Repeat("a", 1025)
 	result, err := duoClient.CreateAuthURL(username, longState)
 	if result != "" {
@@ -309,20 +309,15 @@ func TestCreateAuthURLDuoCodeAttribute(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := tc.duoClient.createAuthURL(username, state)
+			result, _ := tc.duoClient.CreateAuthURL(username, state)
 			urlResult, _ := url.Parse(result)
 			urlVals, _ := url.ParseQuery(urlResult.RawQuery)
 			request := urlVals["request"][0]
-			returnToken, err := jwt.ParseWithClaims(request, &JWTClass{}, func(token *jwt.Token) (interface{}, error) {
-				return []byte(clientSecret), nil
-			})
-			parsedClaims := returnToken.Claims.(*JWTClass)
-			if parsedClaims.UseDuoCodeAttribute != tc.expected {
-				errMsg := fmt.Sprintf("Expected result to be %v but got %v", tc.expected, parsedClaims.UseDuoCodeAttribute)
+			claims := jwtParseFields(request, clientSecret, []string{"use_duo_code_attribute"})
+			v := claims["use_duo_code_attribute"]
+			if v != tc.expected {
+				errMsg := fmt.Sprintf("Expected result to be %v but got %v", tc.expected, v)
 				t.Error(errMsg)
-			}
-			if err != nil {
-				t.Error("Expected err to be nil but got " + err.Error())
 			}
 		})
 	}
@@ -337,13 +332,13 @@ func TestExchangeCodeFor2FAVerifyJWT(t *testing.T) {
 		nonce       string
 		want        string
 	}{
-		{"badPreferredUsername", "preferred_username", badUsername, 0, "", usernameMismatchError},
-		{"badAud", "aud", badClientId, 0, "", jwtResponseError},
-		{"badIat", "iat", "", time.Now().Add(time.Second * time.Duration(expirationTime)).Unix(), "", iatError},
-		{"badExp", "exp", "", time.Now().Unix() - expirationTime, "", expError},
-		{"badIss", "iss", fmt.Sprintf(tokenEndpoint, badApiHost), 0, "", jwtResponseError},
-		{"noNonce", "", "", 0, nonce, nonceError},
-		{"badNonce", "nonce", badNonce, 0, nonce, nonceError},
+		{"badPreferredUsername", "preferred_username", badUsername, 0, "", fmt.Sprintf(notSatisfiedError, "preferred_username")},
+		{"badAud", "aud", badClientId, 0, "", fmt.Sprintf(notSatisfiedError, "aud")},
+		{"badIat", "iat", "", time.Now().Add(time.Second * time.Duration(expirationTime)).Unix(), "", fmt.Sprintf(notSatisfiedError, "iat")},
+		{"badExp", "exp", "", time.Now().Unix() - expirationTime, "", fmt.Sprintf(notSatisfiedError, "exp")},
+		{"badIss", "iss", fmt.Sprintf(tokenEndpoint, badApiHost), 0, "", fmt.Sprintf(notSatisfiedError, "iss")},
+		{"noNonce", "", "", 0, nonce, fmt.Sprintf(notSatisfiedError, "nonce")},
+		{"badNonce", "nonce", badNonce, 0, nonce, fmt.Sprintf(notSatisfiedError, "nonce")},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -353,14 +348,14 @@ func TestExchangeCodeFor2FAVerifyJWT(t *testing.T) {
 			} else {
 				claims[tc.key] = tc.valueInt
 			}
-			result, err := callExchangeAuthorization(tokenEndpointResponse, clientSecret, tc.nonce, claims, jwt.SigningMethodHS512)
+			result, err := callExchangeAuthorization(tokenEndpointResponse, clientSecret, tc.nonce, claims)
 			if result != nil {
 				t.Error(nilResultErrorMsg)
 			}
 			if err == nil {
 				t.Error(nilErrErrorMsg)
 			}
-			if err.Error() != tc.want {
+			if err != nil && err.Error() != tc.want {
 				t.Error("Expected \"" + tc.want + "\" but got " + err.Error())
 			}
 		})
@@ -368,13 +363,13 @@ func TestExchangeCodeFor2FAVerifyJWT(t *testing.T) {
 }
 
 func TestExchangeCodeFor2FASuccess(t *testing.T) {
-	result, err := callExchangeAuthorization(tokenEndpointResponse, clientSecret, "", goodClaims, jwt.SigningMethodHS512)
+	result, err := callExchangeAuthorization(tokenEndpointResponse, clientSecret, "", goodClaims)
 	if result == nil {
 		t.Error(nilResultErrorMsg)
 	}
 	if err != nil {
 		fmt.Println(err)
-		t.Error(nilErrErrorMsg)
+		t.Error(nilErrErrorMsg + err.Error())
 	}
 }
 
@@ -406,7 +401,7 @@ func TestExchangeCodeFor2FANoAccessToken(t *testing.T) {
             "id_token": "%s",
             "token_type": "type"
         }`
-	result, err := callExchangeAuthorization(responseNoAccessToken, clientSecret, "", goodClaims, jwt.SigningMethodHS512)
+	result, err := callExchangeAuthorization(responseNoAccessToken, clientSecret, "", goodClaims)
 	if result != nil {
 		t.Error(nilResultErrorMsg)
 	}
@@ -426,7 +421,7 @@ func TestExchangeCodeFor2FANoIdToken(t *testing.T) {
             "token_type": "type"
         }`
 
-	result, err := callExchangeAuthorization(serverResponseMessage, clientSecret, "", goodClaims, jwt.SigningMethodHS512)
+	result, err := callExchangeAuthorization(serverResponseMessage, clientSecret, "", goodClaims)
 	if result != nil {
 		t.Error(nilResultErrorMsg)
 	}
@@ -445,7 +440,7 @@ func TestExchangeCodeFor2FANoExpiresIn(t *testing.T) {
             "id_token": "%s",
             "token_type": "type"
         }`
-	result, err := callExchangeAuthorization(responseNoExpiresIn, clientSecret, "", goodClaims, jwt.SigningMethodHS512)
+	result, err := callExchangeAuthorization(responseNoExpiresIn, clientSecret, "", goodClaims)
 	if result != nil {
 		t.Error(nilResultErrorMsg)
 	}
@@ -465,7 +460,7 @@ func TestExchangeCodeFor2FANoTokenType(t *testing.T) {
             "token_type": "type"
         }`
 
-	result, err := callExchangeAuthorization(responseNoExpiresIn, clientSecret, "", goodClaims, jwt.SigningMethodHS512)
+	result, err := callExchangeAuthorization(responseNoExpiresIn, clientSecret, "", goodClaims)
 	if result != nil {
 		t.Error(nilResultErrorMsg)
 	}
@@ -480,7 +475,7 @@ func TestExchangeCodeFor2FANoTokenType(t *testing.T) {
 func TestExchangeCodeFor2FAGoodNance(t *testing.T) {
 	claims := copyGoodClaims()
 	claims["nonce"] = nonce
-	result, err := callExchangeAuthorization(tokenEndpointResponse, clientSecret, nonce, claims, jwt.SigningMethodHS512)
+	result, err := callExchangeAuthorization(tokenEndpointResponse, clientSecret, nonce, claims)
 	if result != nil {
 		t.Error(nilResultErrorMsg)
 	}
@@ -490,7 +485,7 @@ func TestExchangeCodeFor2FAGoodNance(t *testing.T) {
 }
 
 func TestExchangeCodeFor2FABadSignature(t *testing.T) {
-	result, err := callExchangeAuthorization(tokenEndpointResponse, badClientSecret, "", goodClaims, jwt.SigningMethodHS512)
+	result, err := callExchangeAuthorization(tokenEndpointResponse, badClientSecret, "", goodClaims)
 	if result != nil {
 		t.Error(nilResultErrorMsg)
 	}
@@ -503,15 +498,15 @@ func TestExchangeCodeFor2FABadSignature(t *testing.T) {
 }
 
 func TestExchangeCodeFor2FABadSigningMethod(t *testing.T) {
-	result, err := callExchangeAuthorization(tokenEndpointResponse, clientSecret, "", goodClaims, jwt.SigningMethodHS256)
+	result, err := callExchangeAuthorizationWithCustomSignature(tokenEndpointResponse, clientSecret, "", goodClaims, wrongSignatureAlgorithm)
 	if result != nil {
 		t.Error(nilResultErrorMsg)
 	}
 	if err == nil {
 		t.Error(nilErrErrorMsg)
 	}
-	if err.Error() != signatureError {
-		t.Error("Expected \"" + signatureError + "\" but got " + err.Error())
+	if err.Error() != sigIsInvalid {
+		t.Error("Expected \"" + sigIsInvalid + "\" but got " + err.Error())
 	}
 }
 
@@ -544,7 +539,7 @@ func TestSendUserAgent(t *testing.T) {
 	ts := httptest.NewTLSServer(nil)
 	duoHost := strings.Split(ts.URL, "//")[1]
 	claims["iss"] = fmt.Sprintf(tokenEndpoint, duoHost)
-	m := createServerResponseMessage(tokenEndpointResponse, clientSecret, claims, jwt.SigningMethodHS512)
+	m := createServerResponseMessage(tokenEndpointResponse, clientSecret, claims, correctSignatureAlgorithm)
 	duoUserAgent := fmt.Sprintf("duo_universal_golang/%s Golang/%s %s/%s", duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	ts.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header["User-Agent"][0] == duoUserAgent {
@@ -556,7 +551,7 @@ func TestSendUserAgent(t *testing.T) {
 	defer ts.Close()
 	duoClient, _ := NewClient(clientId, clientSecret, duoHost, redirectUri)
 	duoClient.duoHttpClient = ts.Client()
-	result, err := duoClient.exchangeAuthorizationCodeFor2faResult(duoCode, username)
+	result, err := duoClient.ExchangeAuthorizationCodeFor2faResult(duoCode, username)
 
 	if result == nil {
 		t.Error(nilResultErrorMsg)
@@ -567,9 +562,9 @@ func TestSendUserAgent(t *testing.T) {
 }
 
 // Creates the return message for the test server
-func createServerResponseMessage(response, secret string, claims jwt.MapClaims, jwtSignature *jwt.SigningMethodHMAC) string {
-	jwtWithClaims := jwt.NewWithClaims(jwtSignature, claims)
-	signedJwt, err := jwtWithClaims.SignedString([]byte(secret))
+func createServerResponseMessage(response, secret string, claims MapClaims, signature string) string {
+
+	signedJwt, err := jwtCreateSignedTokenWithSignature(claims, secret, signature)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -595,13 +590,13 @@ func callHealthCheck(m string) (*HealthCheckResponse, error) {
 }
 
 // Spin up a test server, create a Duo Client, and make an ExchangeAuthorizationCodeFor2faResultWithNonce call
-func callExchangeAuthorization(response, secret, n string, claims jwt.MapClaims, jwtSignature *jwt.SigningMethodHMAC) (*TokenResponse, error) {
+func callExchangeAuthorizationWithCustomSignature(response, secret, n string, claims MapClaims, signature string) (*TokenResponse, error) {
 	ts := httptest.NewTLSServer(nil)
 	duoHost := strings.Split(ts.URL, "//")[1]
 	if claims["iss"] == "" {
 		claims["iss"] = fmt.Sprintf(tokenEndpoint, duoHost)
 	}
-	m := createServerResponseMessage(response, secret, claims, jwtSignature)
+	m := createServerResponseMessage(response, secret, claims, signature)
 	ts.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, m)
 	})
@@ -612,9 +607,14 @@ func callExchangeAuthorization(response, secret, n string, claims jwt.MapClaims,
 	return result, err
 }
 
+// Spin up a test server, create a Duo Client, and make an ExchangeAuthorizationCodeFor2faResultWithNonce call
+func callExchangeAuthorization(response, secret, n string, claims MapClaims) (*TokenResponse, error) {
+	return callExchangeAuthorizationWithCustomSignature(response, secret, n, claims, correctSignatureAlgorithm)
+}
+
 // Copy goodClaims into a new map
-func copyGoodClaims() jwt.MapClaims {
-	claims := make(jwt.MapClaims)
+func copyGoodClaims() MapClaims {
+	claims := make(MapClaims)
 	for key, value := range goodClaims {
 		claims[key] = value
 	}

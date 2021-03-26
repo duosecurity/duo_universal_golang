@@ -15,8 +15,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	"github.com/form3tech-oss/jwt-go"
 )
 
 const defaultStateLength = 36
@@ -26,6 +24,7 @@ const defaultJtiLength = 36
 const clientIdLength = 20
 const clientSecretLength = 40
 const expirationTime = 300
+const allowedSkew = time.Duration(60) * time.Second
 const healthCheckEndpoint = "https://%s/oauth/v1/health_check"
 const oauthV1AuthorizeEndpoint = "https://%s/oauth/v1/authorize"
 const apiHostURIFormat = "https://%s"
@@ -40,10 +39,6 @@ const clientIdError = "The Duo client id is invalid."
 const clientSecretError = "The Duo client secret is invalid."
 const usernameError = "The username is invalid."
 const parameterError = "Did not recieve expected parameters."
-const usernameMismatchError = "Usernames do not match."
-const nonceError = "The nonce is invalid."
-const signatureError = "Invalid signature"
-const jwtResponseError = "JWT Verification failed"
 const duoCodeError = "Missing authorization code"
 const httpUseError = "This client does not allow use of http, please use https"
 const duoVersion = "0.0.1"
@@ -138,7 +133,11 @@ type TokenResponse struct {
 	AuthResult        AuthResultInfo  `json:"auth_result"`
 	AuthContext       AuthContextInfo `json:"auth_context"`
 	Audience          string          `json:"aud"`
-	jwt.StandardClaims
+	ExpiresAt         int64           `json:"exp"`
+	Id                string          `json:"jti"`
+	IssuedAt          int64           `json:"iat"`
+	Issuer            string          `json:"iss"`
+	Subject           string          `json:"sub"`
 }
 
 type Client struct {
@@ -232,7 +231,8 @@ func (client *Client) createJwtArgs(aud string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	claims := jwt.MapClaims{
+
+	claims := MapClaims{
 		"iss": client.clientId,
 		"sub": client.clientId,
 		"aud": aud,
@@ -240,11 +240,11 @@ func (client *Client) createJwtArgs(aud string) (string, error) {
 		"jti": jti,
 	}
 
-	jwtSigned := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
-	token, err := jwtSigned.SignedString([]byte(client.clientSecret))
+	token, err := client.createSignedToken(claims)
 	if err != nil {
 		return "", err
 	}
+
 	return token, nil
 }
 
@@ -313,7 +313,7 @@ func (client *Client) CreateAuthURL(username string, state string) (string, erro
 
 	authorizeEndpoint := fmt.Sprintf(oauthV1AuthorizeEndpoint, client.apiHost)
 
-	claims := jwt.MapClaims{
+	claims := MapClaims{
 		"scope":                  "openid",
 		"redirect_uri":           client.redirectUri,
 		"client_id":              client.clientId,
@@ -326,8 +326,7 @@ func (client *Client) CreateAuthURL(username string, state string) (string, erro
 		"use_duo_code_attribute": client.useDuoCodeAttribute,
 	}
 
-	requestJWTUnsigned := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
-	requestJWTSigned, err := requestJWTUnsigned.SignedString([]byte(client.clientSecret))
+	requestJWTSigned, err := client.createSignedToken(claims)
 	if err != nil {
 		return "", err
 	}
@@ -338,10 +337,17 @@ func (client *Client) CreateAuthURL(username string, state string) (string, erro
 	params.Add("request", requestJWTSigned)
 
 	base, err := url.Parse(authorizeEndpoint)
+	if err != nil {
+		return "", err
+	}
 	base.RawQuery = params.Encode()
 	authorizationURI := base.String()
 
 	return authorizationURI, nil
+}
+
+func (client *Client) createSignedToken(claims MapClaims) (string, error) {
+	return jwtCreateSignedToken(claims, client.clientSecret)
 }
 
 func validateClientCreateAuthURLInputs(username string, state string) error {
@@ -397,27 +403,19 @@ func (client *Client) ExchangeAuthorizationCodeFor2faResultWithNonce(duoCode str
 		return nil, fmt.Errorf(parameterError)
 	}
 
-	// Parse signed JWT into TokenResponse
-	returnToken, err := jwt.ParseWithClaims(bodyToken.IdToken, &TokenResponse{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(client.clientSecret), nil
-	})
+	claimsToVerify := MapClaims{
+		"aud":                client.clientId,
+		"iss":                fmt.Sprintf(tokenEndpoint, client.apiHost),
+		"preferred_username": username,
+		"nonce":              nonce,
+	}
+
+	jwtResponse, err := jwtParseAndValidate(bodyToken.IdToken, client.clientSecret, claimsToVerify)
+
 	if err != nil {
 		return nil, err
 	}
-	jwtResponse := returnToken.Claims.(*TokenResponse)
-	if returnToken.Method != jwt.SigningMethodHS512 {
-		return nil, fmt.Errorf(signatureError)
-	}
-	if jwtResponse.PreferredUsername != username {
-		return nil, fmt.Errorf(usernameMismatchError)
-	}
-	if nonce != "" && jwtResponse.Nonce != nonce {
-		return nil, fmt.Errorf(nonceError)
-	}
-	if !jwtResponse.StandardClaims.VerifyIssuer(fmt.Sprintf(tokenEndpoint, client.apiHost), false) ||
-		jwtResponse.Audience != client.clientId {
-		return nil, fmt.Errorf(jwtResponseError)
-	}
+
 	return jwtResponse, nil
 }
 
