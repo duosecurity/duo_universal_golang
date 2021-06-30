@@ -1,11 +1,11 @@
-# Duo Universal PHP library
+# Duo Universal Go library
 
 This SDK allows a web developer to quickly add Duo's interactive, self-service, two-factor authentication to any Golang web login form.
 
 
 What's included:
 * `duo_universal` - The Golang Duo SDK for interacting with the Duo Universal Prompt
-* `main.go` - An example PHP application with Duo integrated
+* `main.go` - An example Go application with Duo integrated
 
 ## Getting started
 
