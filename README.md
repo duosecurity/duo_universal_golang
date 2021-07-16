@@ -4,28 +4,30 @@ This SDK allows a web developer to quickly add Duo's interactive, self-service, 
 
 
 What's included:
-* `duo_universal` - The Golang Duo SDK for interacting with the Duo Universal Prompt
-* `main.go` - An example Go application with Duo integrated
+* `duouniversal` - The Golang Duo SDK for interacting with the Duo Universal Prompt
+* `example` - An example Go application with Duo integrated
 
-## Getting started
-
-Go into `duo_universal/` and install the `duouniversal` package:
+## Getting Started
+To use the SDK in your existing development environment, install it using Go Modules
 ```
-go build
+go mod init example
+go get github.com/duosecurity/duo_universal_golang/duouniversal
 ```
+Once it's installed, see our developer documentation at https://duo.com/docs/duoweb and `example/main.go` in this repo for guidance on integrating Duo 2FA into your web application.
+See https://github.com/duosecurity/duo_python/pull/57 for a step-by-step example of migrating an existing WebSDK2 integration to the Universal SDK.
 
 ## Contribute
 To contribute, fork this repo and make a pull request with your changes when they are ready.
 
 Install the SDK from source:
 ```
-cd duo_universal/
+cd duouniversal/
 go build
 ```
 
 ## Tests
 ```
-cd duo_universal/
+cd duouniversal/
 go test
 ```
 
@@ -34,31 +36,3 @@ To run formatter
 ```
 go fmt
 ```
-
-## Demo
-### Setup
-Change to the "duo_universal" directory
-```
-cd duo_universal
-```
-
-Install the `duouniversal` package
-```
-go build
-```
-
-Then, create a `Web SDK` application in the Duo Admin Panel. See https://duo.com/docs/protecting-applications for more details.
-
-### Using the App
-
-1. Copy the Client ID, Client Secret, and API Hostname values for your `Web SDK` application into the `duo_config.json` file.
-1. Change back to the root directory
-    ```
-    cd ..
-    ```
-1. Start the app.
-    ```
-    go run main.go
-    ```
-1. Navigate to http://localhost:8080.
-1. Log in with the user you would like to enroll in Duo or with an already enrolled user (any password will work).

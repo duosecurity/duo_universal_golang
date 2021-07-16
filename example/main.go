@@ -10,7 +10,7 @@ import (
 	"path"
 	"strings"
 
-	duouniversal "./duo_universal"
+	"github.com/duosecurity/duo_universal_golang/duouniversal"
 )
 
 const duoUnavailable = "Duo unavailable"
