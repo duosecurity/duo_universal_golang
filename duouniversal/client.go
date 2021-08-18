@@ -83,9 +83,9 @@ type AccessDeviceInfo struct {
 	FlashVersion        string       `json:"flash_version"`
 	Hostname            string       `json:"host_name"`
 	Ip                  string       `json:"ip"`
-	IsEncryptionEnabled bool         `json:"is_encryption_enabled"`
-	IsFirewallEnabled   bool         `json:"is_firewall_enabled"`
-	IsPasswordSet       bool         `json:"is_password_set"`
+	IsEncryptionEnabled string       `json:"is_encryption_enabled"`
+	IsFirewallEnabled   string       `json:"is_firewall_enabled"`
+	IsPasswordSet       string       `json:"is_password_set"`
 	JavaVersion         string       `json:"java_version"`
 	Location            LocationInfo `json:"location"`
 	Os                  string       `json:"os"`
