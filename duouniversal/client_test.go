@@ -1,6 +1,7 @@
 package duouniversal
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -559,6 +560,58 @@ func TestSendUserAgent(t *testing.T) {
 	if err != nil {
 		t.Error(nilErrErrorMsg)
 	}
+}
+
+func TestMarshalingFlagStatus(t *testing.T) {
+	testCases := []struct {
+		name      string
+		enumValue FlagStatus
+		jsonValue string
+	}{
+		{"Disabled marshaling", Disabled, "0"},
+		{"Enabled marshaling", Enabled, "1"},
+		{"Unknown marshaling", Unknown, "\"unknown\""},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := json.Marshal(tc.enumValue)
+			if err != nil {
+				t.Error(err)
+			} else if string(result) != tc.jsonValue {
+				t.Errorf("Value did not correctly marshal. Expected %s, got: %s", string(tc.jsonValue), string(result))
+			}
+		})
+	}
+
+	type testStruct struct {
+		Flag FlagStatus `json:"flag"`
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var result testStruct
+			data := fmt.Sprintf("{\"flag\": %s}", tc.jsonValue)
+			err := json.Unmarshal([]byte(data), &result)
+			if err != nil {
+				t.Error(err)
+			} else if result.Flag != tc.enumValue {
+				t.Errorf("Value did not correctly unmarshal. Expected %d, got: %d", tc.enumValue, result.Flag)
+			}
+		})
+	}
+	t.Run("Error marshaling", func(t *testing.T) {
+		marshalResult, marshalErr := json.Marshal(FlagStatus(12))
+		if marshalErr == nil {
+			t.Errorf("Did not produce error when marshaling invalid value. Instead got: %s", marshalResult)
+		}
+	})
+	t.Run("Error unmarshaling", func(t *testing.T) {
+		var result testStruct
+		data := fmt.Sprintf("{\"flag\": %s}", "badvalue")
+		unmarshalErr := json.Unmarshal([]byte(data), &result)
+		if unmarshalErr == nil {
+			t.Errorf("Did not produce error when unmarshaling invalid value. Instead got %d", result.Flag)
+		}
+	})
 }
 
 // Creates the return message for the test server
