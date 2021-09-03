@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"math/big"
@@ -46,6 +47,48 @@ const duoVersion = "1.0.1"
 var stateLengthError = fmt.Sprintf("State must be at least %d characters long and no longer than %d characters", minimumStateLength, maximumStateLength)
 var generateStateLengthError = fmt.Sprintf("Length needs to be at least %d", minimumStateLength)
 
+type FlagStatus int32
+
+const (
+	Disabled FlagStatus = iota
+	Enabled
+	Unknown = 99
+)
+
+func (f FlagStatus) MarshalJSON() ([]byte, error) {
+	switch f {
+	case Unknown:
+		return json.Marshal("unknown")
+	case Enabled, Disabled:
+		return json.Marshal(int32(f))
+	default:
+		return nil, errors.New("Error marshaling value")
+	}
+}
+
+func (f *FlagStatus) UnmarshalJSON(data []byte) error {
+	var i int32
+	if err := json.Unmarshal(data, &i); err != nil {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		if s == "unknown" {
+			*f = Unknown
+			return nil
+		} else {
+			return errors.New("Error unmarshaling value")
+		}
+	}
+	switch FlagStatus(i) {
+	case Enabled, Disabled:
+		*f = FlagStatus(i)
+		return nil
+	default:
+		return errors.New("Error unmarshaling value")
+	}
+}
+
 type HealthCheckTime struct {
 	Time int `json:"time"`
 }
@@ -83,9 +126,9 @@ type AccessDeviceInfo struct {
 	FlashVersion        string       `json:"flash_version"`
 	Hostname            string       `json:"host_name"`
 	Ip                  string       `json:"ip"`
-	IsEncryptionEnabled bool         `json:"is_encryption_enabled"`
-	IsFirewallEnabled   bool         `json:"is_firewall_enabled"`
-	IsPasswordSet       bool         `json:"is_password_set"`
+	IsEncryptionEnabled FlagStatus   `json:"is_encryption_enabled"`
+	IsFirewallEnabled   FlagStatus   `json:"is_firewall_enabled"`
+	IsPasswordSet       FlagStatus   `json:"is_password_set"`
 	JavaVersion         string       `json:"java_version"`
 	Location            LocationInfo `json:"location"`
 	Os                  string       `json:"os"`
