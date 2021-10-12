@@ -59,15 +59,17 @@ func (f FlagStatus) MarshalJSON() ([]byte, error) {
 	switch f {
 	case Unknown:
 		return json.Marshal("unknown")
-	case Enabled, Disabled:
-		return json.Marshal(int32(f))
+	case Enabled:
+		return json.Marshal(true)
+	case Disabled:
+		return json.Marshal(false)
 	default:
 		return nil, errors.New("Error marshaling value")
 	}
 }
 
 func (f *FlagStatus) UnmarshalJSON(data []byte) error {
-	var i int32
+	var i bool
 	if err := json.Unmarshal(data, &i); err != nil {
 		var s string
 		if err := json.Unmarshal(data, &s); err != nil {
@@ -80,13 +82,12 @@ func (f *FlagStatus) UnmarshalJSON(data []byte) error {
 			return errors.New("Error unmarshaling value")
 		}
 	}
-	switch FlagStatus(i) {
-	case Enabled, Disabled:
-		*f = FlagStatus(i)
-		return nil
-	default:
-		return errors.New("Error unmarshaling value")
+	if i == true {
+		*f = FlagStatus(Enabled)
+	} else {
+		*f = FlagStatus(Disabled)
 	}
+	return nil
 }
 
 type HealthCheckTime struct {

@@ -568,8 +568,8 @@ func TestMarshalingFlagStatus(t *testing.T) {
 		enumValue FlagStatus
 		jsonValue string
 	}{
-		{"Disabled marshaling", Disabled, "0"},
-		{"Enabled marshaling", Enabled, "1"},
+		{"Disabled marshaling", Disabled, "false"},
+		{"Enabled marshaling", Enabled, "true"},
 		{"Unknown marshaling", Unknown, "\"unknown\""},
 	}
 	for _, tc := range testCases {
