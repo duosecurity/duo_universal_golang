@@ -42,7 +42,7 @@ const usernameError = "The username is invalid."
 const parameterError = "Did not recieve expected parameters."
 const duoCodeError = "Missing authorization code"
 const httpUseError = "This client does not allow use of http, please use https"
-const duoVersion = "1.0.1"
+const duoVersion = "1.0.2"
 
 var stateLengthError = fmt.Sprintf("State must be at least %d characters long and no longer than %d characters", minimumStateLength, maximumStateLength)
 var generateStateLengthError = fmt.Sprintf("Length needs to be at least %d", minimumStateLength)
