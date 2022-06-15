@@ -242,6 +242,12 @@ func NewClientDuoCodeAttribute(clientId, clientSecret, apiHost, redirectUri stri
 	}, nil
 }
 
+// SetCustomHTTPClient allows one to set a completely custom http client that
+// will be used to make network calls to the duo api
+func (client *Client) SetCustomHTTPClient(c *http.Client) {
+	client.duoHttpClient = c
+}
+
 // Return a cryptographically-secure string of random characters
 // with the default length
 func (client *Client) GenerateState() (string, error) {
