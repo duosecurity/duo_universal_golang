@@ -218,34 +218,59 @@ func newStrictTLSTransport() *http.Transport {
 	}
 }
 
-func NewClient(clientId, clientSecret, apiHost, redirectUri string) (*Client, error) {
-	return NewClientDuoCodeAttribute(clientId, clientSecret, apiHost, redirectUri, true)
+func NewClient(clientId, clientSecret, apiHost, redirectUri string, opts ...clientOptions) (*Client, error) {
+    return newClient(clientId, clientSecret, apiHost, redirectUri, UseDuoCodeAttribute())
 }
 
 // Creates a new Client with the ability to turn off use_duo_code_attribute
 func NewClientDuoCodeAttribute(clientId, clientSecret, apiHost, redirectUri string, useDuoCodeAttribute bool) (*Client, error) {
-	if len(clientId) != clientIdLength {
-		return nil, fmt.Errorf(clientIdError)
-	} else if len(clientSecret) != clientSecretLength {
-		return nil, fmt.Errorf(clientSecretError)
-	}
-
-	return &Client{
-		clientId:            clientId,
-		clientSecret:        clientSecret,
-		apiHost:             apiHost,
-		redirectUri:         redirectUri,
-		useDuoCodeAttribute: useDuoCodeAttribute,
-		duoHttpClient: &http.Client{
-			Transport: newStrictTLSTransport(),
-		},
-	}, nil
+    if useDuoCodeAttribute {
+        return newClient(clientId, clientSecret, apiHost, redirectUri, UseDuoCodeAttribute())
+    }
+    return newClient(clientId, clientSecret, apiHost, redirectUri)
 }
 
-// SetCustomHTTPClient allows one to set a completely custom http client that
+// Creates a new Client with the ability to turn off use_duo_code_attribute
+func newClient(clientId, clientSecret, apiHost, redirectUri string, opts ...clientOptions) (*Client, error) {
+    if len(clientId) != clientIdLength {
+        return nil, fmt.Errorf(clientIdError)
+    }
+    if len(clientSecret) != clientSecretLength {
+        return nil, fmt.Errorf(clientSecretError)
+    }
+
+    c := &Client{
+        clientId:            clientId,
+        clientSecret:        clientSecret,
+        apiHost:             apiHost,
+        redirectUri:         redirectUri,
+        useDuoCodeAttribute: false,
+        duoHttpClient: &http.Client{
+            Transport: newStrictTLSTransport(),
+        },
+    }
+
+    for _, option := range opts {
+        option(c)
+    }
+    return c, nil
+}
+
+type clientOptions func(*Client)
+
+// WithHTTPClient allows one to set a completely custom http client that
 // will be used to make network calls to the duo api
-func (client *Client) SetCustomHTTPClient(c *http.Client) {
-	client.duoHttpClient = c
+func WithHTTPClient(c *http.Client) func(*Client) {
+    return func(duoClient *Client) {
+        duoClient.duoHttpClient = c
+    }
+}
+
+// UseDuoCodeAttribute will set the useDuoCodeAttribute field on the Duo Client to true, the default is false
+func UseDuoCodeAttribute() func(*Client) {
+    return func(duoClient *Client) {
+        duoClient.useDuoCodeAttribute = true
+    }
 }
 
 // Return a cryptographically-secure string of random characters
