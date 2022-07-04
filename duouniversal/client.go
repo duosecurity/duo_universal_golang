@@ -219,7 +219,8 @@ func newStrictTLSTransport() *http.Transport {
 }
 
 func NewClient(clientId, clientSecret, apiHost, redirectUri string, opts ...clientOptions) (*Client, error) {
-    return newClient(clientId, clientSecret, apiHost, redirectUri, UseDuoCodeAttribute())
+	opts = append(opts, UseDuoCodeAttribute())
+	return newClient(clientId, clientSecret, apiHost, redirectUri, opts...)
 }
 
 // Creates a new Client with the ability to turn off use_duo_code_attribute
