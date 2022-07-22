@@ -7,6 +7,9 @@ What's included:
 * `duouniversal` - The Golang Duo SDK for interacting with the Duo Universal Prompt
 * `example` - An example Go application with Duo integrated
 
+## Tested Against Go Versions: 
+	- 1.16
+
 ## Getting Started
 To use the SDK in your existing development environment, install it using Go Modules
 ```
