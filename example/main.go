@@ -87,6 +87,7 @@ func (session *Session) login(w http.ResponseWriter, r *http.Request, c *duouniv
 			} else {
 				renderTemplate("success.html", duoUnavailable, w)
 			}
+			return
 		}
 
 		// Step 4: Generate and save a state variable
