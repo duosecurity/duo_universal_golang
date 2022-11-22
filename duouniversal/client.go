@@ -91,7 +91,7 @@ func (f *FlagStatus) UnmarshalJSON(data []byte) error {
 }
 
 type HealthCheckTime struct {
-	Time int `json:"time"`
+	Time int `json:"timestamp"`
 }
 
 type HealthCheckResponse struct {
