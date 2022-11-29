@@ -131,7 +131,7 @@ func TestHealthCheckGood(t *testing.T) {
         {
           "stat": "OK",
           "response": {
-            "time": 1357020061
+            "timestamp": 1357020061
           }
         }`
 
@@ -162,7 +162,7 @@ func TestHealthCheckFail(t *testing.T) {
           "message": "invalid_client",
           "message_detail": "The provided client_assertion was invalid",
           "response": {
-            "time": 1357020061
+            "timestamp": 1357020061
           }
         }`
 
@@ -184,7 +184,7 @@ func TestHealthCheckBadJSON(t *testing.T) {
         {
           "stat": "OK"
           "response": {
-            "time": 1357020061
+            "timestamp": 1357020061
           }
         }`
 
