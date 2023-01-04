@@ -96,7 +96,7 @@ func (session *Session) login(w http.ResponseWriter, r *http.Request, c *duouniv
 			log.Fatal("Error generating state: ", err)
 		}
 
-		// Step 5: Create a URL to redirect to inorder to reach the Duo prompt
+		// Step 5: Create a URL to redirect to in order to reach the Duo prompt
 		redirectToDuoUrl, err := c.CreateAuthURL(session.duoUsername, session.duoState)
 		if err != nil {
 			log.Fatal("Error creating the auth URL: ", err)
