@@ -12,7 +12,7 @@ What's included:
 
 ## TLS 1.2 and 1.3 Support
 
-Duo_api_golang uses the Go cryptography library for TLS operations. Go versions 1.13 and higher support both TLS 1.2 and 1.3.
+Duo_universal_golang uses the Go cryptography library for TLS operations. Go versions 1.13 and higher support both TLS 1.2 and 1.3.
 
 ## Getting Started
 To use the SDK in your existing development environment, install it using Go Modules
