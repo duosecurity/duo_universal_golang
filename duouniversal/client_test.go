@@ -333,13 +333,13 @@ func TestExchangeCodeFor2FAVerifyJWT(t *testing.T) {
 		nonce       string
 		want        string
 	}{
-		{"badPreferredUsername", "preferred_username", badUsername, 0, "", fmt.Sprintf(notSatisfiedError, "preferred_username")},
+		{"badPreferredUsername", "preferred_username", badUsername, 0, "", fmt.Sprintf(notSatisfiedError, "\"preferred_username\"")},
 		{"badAud", "aud", badClientId, 0, "", fmt.Sprintf(notSatisfiedError, "aud")},
 		{"badIat", "iat", "", time.Now().Add(time.Second * time.Duration(expirationTime)).Unix(), "", fmt.Sprintf(notSatisfiedError, "iat")},
 		{"badExp", "exp", "", time.Now().Unix() - expirationTime, "", fmt.Sprintf(notSatisfiedError, "exp")},
-		{"badIss", "iss", fmt.Sprintf(tokenEndpoint, badApiHost), 0, "", fmt.Sprintf(notSatisfiedError, "iss")},
-		{"noNonce", "", "", 0, nonce, fmt.Sprintf(notSatisfiedError, "nonce")},
-		{"badNonce", "nonce", badNonce, 0, nonce, fmt.Sprintf(notSatisfiedError, "nonce")},
+		{"badIss", "iss", fmt.Sprintf(tokenEndpoint, badApiHost), 0, "", fmt.Sprintf(notSatisfiedError, "\"iss\"")},
+		{"noNonce", "", "", 0, nonce, fmt.Sprintf(notSatisfiedError, "\"nonce\"")},
+		{"badNonce", "nonce", badNonce, 0, nonce, fmt.Sprintf(notSatisfiedError, "\"nonce\"")},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
