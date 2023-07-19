@@ -357,7 +357,7 @@ func TestExchangeCodeFor2FAVerifyJWT(t *testing.T) {
 				t.Error(nilErrErrorMsg)
 			}
 			if err != nil && err.Error() != tc.want {
-				t.Error("Expected \"" + tc.want + "\" but got " + err.Error())
+				t.Error("Expected " + tc.want + " but got " + err.Error())
 			}
 		})
 	}
