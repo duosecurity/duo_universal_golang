@@ -8,7 +8,8 @@ What's included:
 * `example` - An example Go application with Duo integrated
 
 ## Tested Against Go Versions: 
-	- 1.16
+	- 1.19
+	- 1.20
 
 ## TLS 1.2 and 1.3 Support
 
