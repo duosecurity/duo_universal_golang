@@ -53,6 +53,7 @@ var nilErrErrorMsg = "Did not recieve expected error"
 var nilResultErrorMsg = "Result should be nil but is not"
 var sigIsInvalid = "failed to verify jws signature: failed to verify message: failed to match hmac signature"
 var notSatisfiedError = "%s not satisfied"
+var notSatisfiedErrorMismatch = "%s not satisfied: values do not match"
 var duoCode = "abcdefghijklmnopqrstuvwxyz"
 var badUsername = "badUsername"
 
@@ -333,13 +334,13 @@ func TestExchangeCodeFor2FAVerifyJWT(t *testing.T) {
 		nonce       string
 		want        string
 	}{
-		{"badPreferredUsername", "preferred_username", badUsername, 0, "", fmt.Sprintf(notSatisfiedError, "preferred_username")},
+		{"badPreferredUsername", "preferred_username", badUsername, 0, "", fmt.Sprintf(notSatisfiedErrorMismatch, "\"preferred_username\"")},
 		{"badAud", "aud", badClientId, 0, "", fmt.Sprintf(notSatisfiedError, "aud")},
 		{"badIat", "iat", "", time.Now().Add(time.Second * time.Duration(expirationTime)).Unix(), "", fmt.Sprintf(notSatisfiedError, "iat")},
 		{"badExp", "exp", "", time.Now().Unix() - expirationTime, "", fmt.Sprintf(notSatisfiedError, "exp")},
-		{"badIss", "iss", fmt.Sprintf(tokenEndpoint, badApiHost), 0, "", fmt.Sprintf(notSatisfiedError, "iss")},
-		{"noNonce", "", "", 0, nonce, fmt.Sprintf(notSatisfiedError, "nonce")},
-		{"badNonce", "nonce", badNonce, 0, nonce, fmt.Sprintf(notSatisfiedError, "nonce")},
+		{"badIss", "iss", fmt.Sprintf(tokenEndpoint, badApiHost), 0, "", fmt.Sprintf(notSatisfiedErrorMismatch, "\"iss\"")},
+		{"noNonce", "", "", 0, nonce, fmt.Sprintf(notSatisfiedErrorMismatch, "\"nonce\"")},
+		{"badNonce", "nonce", badNonce, 0, nonce, fmt.Sprintf(notSatisfiedErrorMismatch, "\"nonce\"")},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -357,7 +358,7 @@ func TestExchangeCodeFor2FAVerifyJWT(t *testing.T) {
 				t.Error(nilErrErrorMsg)
 			}
 			if err != nil && err.Error() != tc.want {
-				t.Error("Expected \"" + tc.want + "\" but got " + err.Error())
+				t.Error("Expected " + tc.want + " but got " + err.Error())
 			}
 		})
 	}
