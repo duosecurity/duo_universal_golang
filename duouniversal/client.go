@@ -154,20 +154,21 @@ type UserInfo struct {
 }
 
 type AuthContextInfo struct {
-	AccessDevice AccessDeviceInfo `json:"access_device"`
-	Alias        string           `json:"alias"`
-	Application  ApplicationInfo  `json:"application"`
-	AuthDevice   AuthDeviceInfo   `json:"auth_device"`
-	Email        string           `json:"email"`
-	EventType    string           `json:"event_type"`
-	Factor       string           `json:"factor"`
-	Isotimestamp string           `json:"isotimestamp"`
-	OodSoftware  string           `json:"ood_software"`
-	Reason       string           `json:"reason"`
-	Result       string           `json:"result"`
-	Timestamp    int              `json:"timestamp"`
-	Txid         string           `json:"txid"`
-	User         UserInfo         `json:"user"`
+	AccessDevice          AccessDeviceInfo `json:"access_device"`
+	Alias                 string           `json:"alias"`
+	Application           ApplicationInfo  `json:"application"`
+	AuthDevice            AuthDeviceInfo   `json:"auth_device"`
+	Email                 string           `json:"email"`
+	EventType             string           `json:"event_type"`
+	Factor                string           `json:"factor"`
+	Isotimestamp          string           `json:"isotimestamp"`
+	OodSoftware           string           `json:"ood_software"`
+	Reason                string           `json:"reason"`
+	Result                string           `json:"result"`
+	Timestamp             int              `json:"timestamp"`
+	Txid                  string           `json:"txid"`
+	User                  UserInfo         `json:"user"`
+	TrustedEndpointStatus string           `json:"trusted_endpoint_status"`
 }
 
 type TokenResponse struct {
