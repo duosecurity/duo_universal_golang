@@ -190,6 +190,7 @@ type Client struct {
 	apiHost             string
 	redirectUri         string
 	useDuoCodeAttribute bool
+	caPinning           bool
 	duoHttpClient       httpClient
 }
 
@@ -203,18 +204,18 @@ func refuseHttpConnection(ctx context.Context, network, address string) (net.Con
 }
 
 // Creates a http.Transport that pins certs to Duo and refuses HTTP connections
-func newStrictTLSTransport() *http.Transport {
-	certPool := x509.NewCertPool()
-	certPool.AppendCertsFromPEM([]byte(duoPinnedCert))
+func newStrictTLSTransport(caPinning bool) *http.Transport {
+	tlsConfig := &tls.Config{}
 
-	tlsDialer := &tls.Dialer{
-		Config: &tls.Config{
-			RootCAs: certPool,
-		},
+	if caPinning {
+		certPool := x509.NewCertPool()
+		certPool.AppendCertsFromPEM([]byte(duoPinnedCert))
+		tlsConfig.RootCAs = certPool
 	}
+
 	return &http.Transport{
-		DialContext:    refuseHttpConnection,
-		DialTLSContext: tlsDialer.DialContext,
+		DialContext:     refuseHttpConnection,
+		TLSClientConfig: tlsConfig,
 	}
 }
 
@@ -246,14 +247,19 @@ func newClient(clientId, clientSecret, apiHost, redirectUri string, opts ...clie
         apiHost:             apiHost,
         redirectUri:         redirectUri,
         useDuoCodeAttribute: false,
-        duoHttpClient: &http.Client{
-            Transport: newStrictTLSTransport(),
-        },
+        caPinning:           true,
     }
 
     for _, option := range opts {
         option(c)
     }
+
+    if c.duoHttpClient == nil {
+        c.duoHttpClient = &http.Client{
+            Transport: newStrictTLSTransport(c.caPinning),
+        }
+    }
+
     return c, nil
 }
 
@@ -271,6 +277,16 @@ func WithHTTPClient(c *http.Client) func(*Client) {
 func UseDuoCodeAttribute() func(*Client) {
     return func(duoClient *Client) {
         duoClient.useDuoCodeAttribute = true
+    }
+}
+
+// SetCAPinning controls whether Duo's CA certificate pinning is enforced.
+// When set to false, the client uses the system's default certificate trust store
+// instead of the pinned Duo CA certificates, while keeping TLS verification active.
+// Default is true (CA pinning enabled).
+func SetCAPinning(enabled bool) func(*Client) {
+    return func(duoClient *Client) {
+        duoClient.caPinning = enabled
     }
 }
 

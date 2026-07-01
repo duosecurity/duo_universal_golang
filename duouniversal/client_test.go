@@ -127,6 +127,48 @@ func TestClientInitShortClientSecret(t *testing.T) {
 	}
 }
 
+func TestNewClientDefaultHasCAPinning(t *testing.T) {
+	client, err := NewClient(clientId, clientSecret, apiHost, redirectUri)
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpClient := client.duoHttpClient.(*http.Client)
+	transport := httpClient.Transport.(*http.Transport)
+	if transport.TLSClientConfig == nil || transport.TLSClientConfig.RootCAs == nil {
+		t.Fatal("Default client should have pinned CA certificates")
+	}
+}
+
+func TestSetCAPinningEnabled(t *testing.T) {
+	client, err := NewClient(clientId, clientSecret, apiHost, redirectUri, SetCAPinning(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpClient := client.duoHttpClient.(*http.Client)
+	transport := httpClient.Transport.(*http.Transport)
+	if transport.TLSClientConfig == nil || transport.TLSClientConfig.RootCAs == nil {
+		t.Fatal("Client with CA pinning enabled should have pinned CA certificates")
+	}
+}
+
+func TestSetCAPinningDisabled(t *testing.T) {
+	client, err := NewClient(clientId, clientSecret, apiHost, redirectUri, SetCAPinning(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpClient := client.duoHttpClient.(*http.Client)
+	transport := httpClient.Transport.(*http.Transport)
+	if transport.TLSClientConfig == nil {
+		t.Fatal("Client with CA pinning disabled should still have TLS config")
+	}
+	if transport.TLSClientConfig.RootCAs != nil {
+		t.Fatal("Client with CA pinning disabled should use system trust store (nil RootCAs)")
+	}
+	if transport.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("Disabling CA pinning should not disable TLS verification")
+	}
+}
+
 func TestHealthCheckGood(t *testing.T) {
 	serverResponseMessage := `
         {
@@ -520,7 +562,7 @@ func TestBlockHttpRequests(t *testing.T) {
 
 	expectedError := "Post \"" + ts.URL + "\": " + httpUseError
 	duoClient, _ := NewClient(clientId, clientSecret, ts.URL, redirectUri)
-	ts.Client().Transport = newStrictTLSTransport()
+	ts.Client().Transport = newStrictTLSTransport(true)
 	duoClient.duoHttpClient = ts.Client()
 
 	result, err := duoClient._makeHttpRequest(ts.URL, "", nil)
