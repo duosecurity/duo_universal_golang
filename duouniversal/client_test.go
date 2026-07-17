@@ -584,7 +584,7 @@ func TestSendUserAgent(t *testing.T) {
 	duoHost := strings.Split(ts.URL, "//")[1]
 	claims["iss"] = fmt.Sprintf(tokenEndpoint, duoHost)
 	m := createServerResponseMessage(tokenEndpointResponse, clientSecret, claims, correctSignatureAlgorithm)
-	duoUserAgent := fmt.Sprintf("duo_universal_golang/%s Golang/%s %s/%s", duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	duoUserAgent := fmt.Sprintf("duo_universal_golang/%s Golang/%s %s/%s ca_bundle/%s (ca_pinning=enabled)", duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH, caBundleVersion)
 	ts.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header["User-Agent"][0] == duoUserAgent {
 			fmt.Fprintln(w, m)
@@ -602,6 +602,22 @@ func TestSendUserAgent(t *testing.T) {
 	}
 	if err != nil {
 		t.Error(nilErrErrorMsg)
+	}
+}
+
+func TestUserAgentCAPinningEnabled(t *testing.T) {
+	duoClient, _ := NewClient(clientId, clientSecret, apiHost, redirectUri, SetCAPinning(true))
+	expected := fmt.Sprintf("duo_universal_golang/%s Golang/%s %s/%s ca_bundle/%s (ca_pinning=enabled)", duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH, caBundleVersion)
+	if got := duoClient.userAgent(); got != expected {
+		t.Errorf("Expected user agent %q but got %q", expected, got)
+	}
+}
+
+func TestUserAgentCAPinningDisabled(t *testing.T) {
+	duoClient, _ := NewClient(clientId, clientSecret, apiHost, redirectUri, SetCAPinning(false))
+	expected := fmt.Sprintf("duo_universal_golang/%s Golang/%s %s/%s ca_bundle/%s (ca_pinning=disabled)", duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH, caBundleVersion)
+	if got := duoClient.userAgent(); got != expected {
+		t.Errorf("Expected user agent %q but got %q", expected, got)
 	}
 }
 
