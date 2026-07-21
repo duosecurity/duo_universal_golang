@@ -43,6 +43,7 @@ const parameterError = "Did not recieve expected parameters."
 const duoCodeError = "Missing authorization code"
 const httpUseError = "This client does not allow use of http, please use https"
 const duoVersion = "1.1.0"
+const caBundleVersion = "1.0"
 
 var stateLengthError = fmt.Sprintf("State must be at least %d characters long and no longer than %d characters", minimumStateLength, maximumStateLength)
 var generateStateLengthError = fmt.Sprintf("Length needs to be at least %d", minimumStateLength)
@@ -290,6 +291,20 @@ func SetCAPinning(enabled bool) func(*Client) {
     }
 }
 
+// userAgent builds the User-Agent string sent with requests to the Duo API.
+// It includes the CA bundle version and the runtime CA pinning state so that
+// the values accurately reflect how the client is configured.
+func (client *Client) userAgent() string {
+    caPinningStatus := "enabled"
+    if !client.caPinning {
+        caPinningStatus = "disabled"
+    }
+    return fmt.Sprintf(
+        "duo_universal_golang/%s Golang/%s %s/%s ca_bundle/%s (ca_pinning=%s)",
+        duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH, caBundleVersion, caPinningStatus,
+    )
+}
+
 // Return a cryptographically-secure string of random characters
 // with the default length
 func (client *Client) GenerateState() (string, error) {
@@ -479,7 +494,7 @@ func (client *Client) ExchangeAuthorizationCodeFor2faResultWithNonce(duoCode str
 	postParams.Add("client_assertion_type", clientAssertionType)
 	postParams.Add("client_assertion", jwtToken)
 
-	duoUserAgent := fmt.Sprintf("duo_universal_golang/%s Golang/%s %s/%s", duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	duoUserAgent := client.userAgent()
 
 	body, err := client._makeHttpRequest(tokenUrl, duoUserAgent, postParams)
 	if err != nil {
