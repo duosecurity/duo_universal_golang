@@ -42,7 +42,7 @@ const usernameError = "The username is invalid."
 const parameterError = "Did not recieve expected parameters."
 const duoCodeError = "Missing authorization code"
 const httpUseError = "This client does not allow use of http, please use https"
-const duoVersion = "1.1.0"
+const duoVersion = "1.2.0"
 const caBundleVersion = "1.0"
 
 var stateLengthError = fmt.Sprintf("State must be at least %d characters long and no longer than %d characters", minimumStateLength, maximumStateLength)
@@ -227,41 +227,41 @@ func NewClient(clientId, clientSecret, apiHost, redirectUri string, opts ...clie
 
 // Creates a new Client with the ability to turn off use_duo_code_attribute
 func NewClientDuoCodeAttribute(clientId, clientSecret, apiHost, redirectUri string, useDuoCodeAttribute bool) (*Client, error) {
-    if useDuoCodeAttribute {
-        return newClient(clientId, clientSecret, apiHost, redirectUri, UseDuoCodeAttribute())
-    }
-    return newClient(clientId, clientSecret, apiHost, redirectUri)
+	if useDuoCodeAttribute {
+		return newClient(clientId, clientSecret, apiHost, redirectUri, UseDuoCodeAttribute())
+	}
+	return newClient(clientId, clientSecret, apiHost, redirectUri)
 }
 
 // Creates a new Client with the ability to turn off use_duo_code_attribute
 func newClient(clientId, clientSecret, apiHost, redirectUri string, opts ...clientOptions) (*Client, error) {
-    if len(clientId) != clientIdLength {
-        return nil, fmt.Errorf(clientIdError)
-    }
-    if len(clientSecret) != clientSecretLength {
-        return nil, fmt.Errorf(clientSecretError)
-    }
+	if len(clientId) != clientIdLength {
+		return nil, fmt.Errorf(clientIdError)
+	}
+	if len(clientSecret) != clientSecretLength {
+		return nil, fmt.Errorf(clientSecretError)
+	}
 
-    c := &Client{
-        clientId:            clientId,
-        clientSecret:        clientSecret,
-        apiHost:             apiHost,
-        redirectUri:         redirectUri,
-        useDuoCodeAttribute: false,
-        caPinning:           true,
-    }
+	c := &Client{
+		clientId:            clientId,
+		clientSecret:        clientSecret,
+		apiHost:             apiHost,
+		redirectUri:         redirectUri,
+		useDuoCodeAttribute: false,
+		caPinning:           true,
+	}
 
-    for _, option := range opts {
-        option(c)
-    }
+	for _, option := range opts {
+		option(c)
+	}
 
-    if c.duoHttpClient == nil {
-        c.duoHttpClient = &http.Client{
-            Transport: newStrictTLSTransport(c.caPinning),
-        }
-    }
+	if c.duoHttpClient == nil {
+		c.duoHttpClient = &http.Client{
+			Transport: newStrictTLSTransport(c.caPinning),
+		}
+	}
 
-    return c, nil
+	return c, nil
 }
 
 type clientOptions func(*Client)
@@ -269,16 +269,16 @@ type clientOptions func(*Client)
 // WithHTTPClient allows one to set a completely custom http client that
 // will be used to make network calls to the duo api
 func WithHTTPClient(c *http.Client) func(*Client) {
-    return func(duoClient *Client) {
-        duoClient.duoHttpClient = c
-    }
+	return func(duoClient *Client) {
+		duoClient.duoHttpClient = c
+	}
 }
 
 // UseDuoCodeAttribute will set the useDuoCodeAttribute field on the Duo Client to true, the default is false
 func UseDuoCodeAttribute() func(*Client) {
-    return func(duoClient *Client) {
-        duoClient.useDuoCodeAttribute = true
-    }
+	return func(duoClient *Client) {
+		duoClient.useDuoCodeAttribute = true
+	}
 }
 
 // SetCAPinning controls whether Duo's CA certificate pinning is enforced.
@@ -286,23 +286,23 @@ func UseDuoCodeAttribute() func(*Client) {
 // instead of the pinned Duo CA certificates, while keeping TLS verification active.
 // Default is true (CA pinning enabled).
 func SetCAPinning(enabled bool) func(*Client) {
-    return func(duoClient *Client) {
-        duoClient.caPinning = enabled
-    }
+	return func(duoClient *Client) {
+		duoClient.caPinning = enabled
+	}
 }
 
 // userAgent builds the User-Agent string sent with requests to the Duo API.
 // It includes the CA bundle version and the runtime CA pinning state so that
 // the values accurately reflect how the client is configured.
 func (client *Client) userAgent() string {
-    caPinningStatus := "enabled"
-    if !client.caPinning {
-        caPinningStatus = "disabled"
-    }
-    return fmt.Sprintf(
-        "duo_universal_golang/%s Golang/%s %s/%s ca_bundle/%s (ca_pinning=%s)",
-        duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH, caBundleVersion, caPinningStatus,
-    )
+	caPinningStatus := "enabled"
+	if !client.caPinning {
+		caPinningStatus = "disabled"
+	}
+	return fmt.Sprintf(
+		"duo_universal_golang/%s Golang/%s %s/%s ca_bundle/%s (ca_pinning=%s)",
+		duoVersion, runtime.Version(), runtime.GOOS, runtime.GOARCH, caBundleVersion, caPinningStatus,
+	)
 }
 
 // Return a cryptographically-secure string of random characters
