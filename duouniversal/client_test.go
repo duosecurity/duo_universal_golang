@@ -578,6 +578,32 @@ func TestBlockHttpRequests(t *testing.T) {
 	}
 }
 
+// Regression test: newStrictTLSTransport must still allow genuine HTTPS
+// requests. Every other test in this file that exercises an HTTP call
+// replaces duoClient.duoHttpClient with the httptest server's own client,
+// bypassing newStrictTLSTransport entirely, so none of them would have
+// caught a bug in that function itself. This test drives an HTTPS request
+// straight through the real transport returned by newStrictTLSTransport.
+func TestStrictTLSTransportAllowsHttps(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	defer ts.Close()
+
+	transport := newStrictTLSTransport(false)
+	transport.TLSClientConfig.RootCAs = ts.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs
+
+	client := &http.Client{Transport: transport}
+	resp, err := client.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("expected HTTPS request through newStrictTLSTransport to succeed, got: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+}
+
 func TestSendUserAgent(t *testing.T) {
 	claims := copyGoodClaims()
 	ts := httptest.NewTLSServer(nil)
