@@ -214,8 +214,17 @@ func newStrictTLSTransport(caPinning bool) *http.Transport {
 		tlsConfig.RootCAs = certPool
 	}
 
+	// DialTLSContext must be set so HTTPS requests bypass DialContext entirely
+	// (see net/http.Transport's DialTLSContext doc). Without it, Transport
+	// falls back to DialContext to obtain a raw connection before wrapping it
+	// in TLS with TLSClientConfig -- and since DialContext here is
+	// refuseHttpConnection, that fallback path fails every request,
+	// including legitimate HTTPS ones, before TLSClientConfig is ever used.
+	tlsDialer := &tls.Dialer{Config: tlsConfig}
+
 	return &http.Transport{
 		DialContext:     refuseHttpConnection,
+		DialTLSContext:  tlsDialer.DialContext,
 		TLSClientConfig: tlsConfig,
 	}
 }
